@@ -1,0 +1,17 @@
+{
+    "BASE_URL": "https://apis.noonwake.net",
+    "ASR_WS_URL": "ws://127.0.0.1:6006",
+    "DIFY": {
+        "BASE_URL": "https://dify-cn.noonwake.net/v1",
+        "HEXAGRAM_REPORT_KEY": "app-xxx",
+        "FORTUNE_REPORT_KEY": "app-xxx",
+        "SPECIAL_DAY_REPORT_KEY": "app-xxx",
+        "CHAT_DEMO_KEY": "app-xxx"
+    },
+    "DOUBAO": {
+        "APP_ID": "your-app-id",
+        "ACCESS_KEY": "your-access-key",
+        "APP_KEY": "your-app-key",
+        "SPEAKER": "zh_female_xiaohe_jupiter_bigtts"
+    }
+}
