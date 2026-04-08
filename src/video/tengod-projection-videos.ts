@@ -4,7 +4,7 @@ export type ProjectionScene = 'idle' | 'wake' | 'interpret' | 'casting'
 
 type ProjectionVideoMap = Record<TengodId, Record<ProjectionScene, string[]>>
 
-// Pi 专用视频存放在 src/pi/assets/video/{TENGOD_ID}/{scene}/
+// Pi 专用视频存放在 src/back/pi/assets/video/{TENGOD_ID}/{scene}/
 // 与 AllSpirit APP 资源完全隔离，后续补充其他十神时在对应目录下新增文件夹即可
 const rawVideoModules = import.meta.glob(
     '../assets/video/*/{idle,wake,interpret,casting}/*.{mp4,webm,mov}',

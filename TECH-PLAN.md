@@ -1,6 +1,6 @@
 # 树莓派 Home App 技术方案
 
-> 基于现有 `src/pi/` 项目，面向树莓派桌面终端产品的技术选型与演进路线。
+> 基于现有 `src/back/pi/` 项目，面向树莓派桌面终端产品的技术选型与演进路线。
 
 ## 1. 现有技术基础
 
@@ -123,7 +123,7 @@ alias pi-tunnel='ssh -fN \
 ┌──────────────────────▼───────────────────────────────────┐
 │  Raspberry Pi 5 (Bookworm / Wayland / Wayfire)          │
 │                                                          │
-│  nginx (静态文件服务 :8082, /pi/)                        │
+│  nginx (静态文件服务 :8082, /back/pi/)                        │
 │  PM2 → hardware-service (Node.js 硬件桥接 :3001)        │
 │                                                          │
 │  Wayfire 自启:                                           │
@@ -145,16 +145,16 @@ server {
     gzip_min_length 1024;
 
     # Vite 构建产物带 hash，长缓存安全
-    location /pi/assets/ {
-        alias /home/pi/app/dist-pi/assets/;
+    location /back/pi/assets/ {
+        alias /home/back/pi/app/dist-pi/assets/;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
     # SPA 入口：no-cache 确保每次加载最新 index.html
-    location /pi/ {
-        alias /home/pi/app/dist-pi/;
-        try_files $uri $uri/ /pi/index.html;
+    location /back/pi/ {
+        alias /home/back/pi/app/dist-pi/;
+        try_files $uri $uri/ /back/pi/index.html;
         add_header Cache-Control "no-cache";
     }
 
@@ -185,10 +185,10 @@ server {
 # ~/app/start-kiosk.sh
 set -e
 
-URL_MAIN="http://localhost:8082/pi/"
-URL_PROJ="http://localhost:8082/pi/projection"
-CHROME_PROFILE_1="/home/pi/.config/chromium-kiosk-1"
-CHROME_PROFILE_2="/home/pi/.config/chromium-kiosk-2"
+URL_MAIN="http://localhost:8082/back/pi/"
+URL_PROJ="http://localhost:8082/back/pi/projection"
+CHROME_PROFILE_1="/home/back/pi/.config/chromium-kiosk-1"
+CHROME_PROFILE_2="/home/back/pi/.config/chromium-kiosk-2"
 
 CHROME_FLAGS=(
     "--noerrdialogs"
@@ -266,7 +266,7 @@ position = 1920,0
 [autostart]
 autostart_wf_shell = false
 hide_cursor = unclutter --timeout 1 &
-kiosk = /home/pi/app/start-kiosk.sh
+kiosk = /home/back/pi/app/start-kiosk.sh
 ```
 
 ### 3.5 systemd 崩溃自动重启
@@ -279,7 +279,7 @@ After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=/home/pi/app/start-kiosk.sh
+ExecStart=/home/back/pi/app/start-kiosk.sh
 Restart=always
 RestartSec=5s
 Environment=WAYLAND_DISPLAY=wayland-1
@@ -305,7 +305,7 @@ module.exports = {
     apps: [{
         name: 'hardware-service',
         script: './src/hardware/index.js',
-        cwd: '/home/pi/app',
+        cwd: '/home/back/pi/app',
         autorestart: true,
         max_memory_restart: '150M',
         restart_delay: 3000,
@@ -314,8 +314,8 @@ module.exports = {
             PORT: 3001,
             SERIAL_PORT: '/dev/ttyACM0',
         },
-        out_file: '/home/pi/logs/hardware-out.log',
-        error_file: '/home/pi/logs/hardware-error.log',
+        out_file: '/home/back/pi/logs/hardware-out.log',
+        error_file: '/home/back/pi/logs/hardware-error.log',
         log_date_format: 'YYYY-MM-DD HH:mm:ss',
     }],
 }
@@ -328,7 +328,7 @@ module.exports = {
 ```bash
 # 监听文件变化，自动构建并同步
 brew install fswatch
-fswatch -r src/pi/ | while read; do
+fswatch -r src/back/pi/ | while read; do
     yarn build-pi && rsync -avz --delete dist-pi/ pi@raspberrypi.local:~/app/dist-pi/
 done
 ```
@@ -380,16 +380,16 @@ restart-kiosk:
             "type": "chrome",
             "request": "attach",
             "port": 9222,
-            "urlFilter": "http://localhost:8082/pi/*",
+            "urlFilter": "http://localhost:8082/back/pi/*",
             "webRoot": "${workspaceFolder}/src/pi",
-            "sourceMapPathOverrides": { "/pi/*": "${workspaceFolder}/src/pi/*" }
+            "sourceMapPathOverrides": { "/back/pi/*": "${workspaceFolder}/src/back/pi/*" }
         },
         {
             "name": "Attach Pi 副屏 (9223)",
             "type": "chrome",
             "request": "attach",
             "port": 9223,
-            "urlFilter": "http://localhost:8082/pi/projection*",
+            "urlFilter": "http://localhost:8082/back/pi/projection*",
             "webRoot": "${workspaceFolder}/src/pi"
         }
     ]
@@ -525,8 +525,8 @@ const printer = new ThermalPrinter({
 ### 6.2 双屏实现
 
 Pi 4/5 原生支持双屏输出，现有 BroadcastChannel 架构直接复用：
-- 窗口 1：`http://localhost:8082/pi/` → 主屏日历/运势
-- 窗口 2：`http://localhost:8082/pi/projection` → 角色投影
+- 窗口 1：`http://localhost:8082/back/pi/` → 主屏日历/运势
+- 窗口 2：`http://localhost:8082/back/pi/projection` → 角色投影
 
 ---
 

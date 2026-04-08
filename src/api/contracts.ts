@@ -23,10 +23,10 @@ function def<REQ, RESP>(path: string): ApiDef<REQ, RESP> {
 
 export const piAuth = {
     createSession: def<void, { session_id: string; expires_at: number }>(
-        '/pi/auth/create_session'
+        '/back/pi/auth/create_session'
     ),
     pollSession: def<{ session_id: string }, { status: 'pending' | 'confirmed' | 'expired'; token?: string }>(
-        '/pi/auth/poll_session'
+        '/back/pi/auth/poll_session'
     ),
 }
 
@@ -49,20 +49,20 @@ export const piHome = {
             }
         }>
         user: { nickname: string; avatar: string } | null
-    }>('/pi/home/today'),
+    }>('/back/pi/home/today'),
 }
 
 // ── 用户 ─────────────────────────────────────────────────
 
 export const minaUser = {
     getUserInfo: def<{ deviceInfo?: any } | undefined, UserInfo | undefined>(
-        '/mina/user/getUserInfo'
+        '/back/mina/user/getUserInfo'
     ),
     sendPhoneVerifyCode: def<{ phone: string }, void>(
-        '/mina/user/sendPhoneVerifyCode'
+        '/back/mina/user/sendPhoneVerifyCode'
     ),
     verifyPhoneVerifyCode: def<{ phone: string; verifyCode: string }, UserInfo>(
-        '/mina/user/verifyPhoneVerifyCode'
+        '/back/mina/user/verifyPhoneVerifyCode'
     ),
 }
 
@@ -70,6 +70,6 @@ export const minaUser = {
 
 export const minaBazi = {
     getActive: def<void, Bazi | undefined>(
-        '/mina/bazi/get_active'
+        '/back/mina/bazi/get_active'
     ),
 }

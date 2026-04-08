@@ -199,10 +199,10 @@ asr.stopAndRecognize()  // 停止并获取结果
 
 | 文件 | 说明 |
 |------|------|
-| `src/pi/utils/speech-recognition.ts` | 统一 ASR 接口，包含原生和 WebSocket 两种实现 |
-| `src/pi/home/shake-hexagram.tsx` | AudioSpectrum 组件，使用统一 ASR 接口 |
-| `src/pi/utils/api.ts` | AppConfig 类型定义（含 `ASR_WS_URL`） |
-| `src/pi/public/config.json` | 运行时配置（生产环境） |
+| `src/back/pi/utils/speech-recognition.ts` | 统一 ASR 接口，包含原生和 WebSocket 两种实现 |
+| `src/back/pi/home/shake-hexagram.tsx` | AudioSpectrum 组件，使用统一 ASR 接口 |
+| `src/back/pi/utils/api.ts` | AppConfig 类型定义（含 `ASR_WS_URL`） |
+| `src/back/pi/public/config.json` | 运行时配置（生产环境） |
 
 ### 配置方式
 
@@ -260,9 +260,9 @@ asr.stopAndRecognize()  // 停止并获取结果
 
 | 文件 | 说明 |
 |------|------|
-| `src/pi/utils/doubao-realtime.ts` | 豆包端到端 WebSocket 客户端（二进制协议编解码、会话管理、PCM 播放） |
-| `src/pi/home/shake-hexagram.tsx` | 结果页自动初始化豆包会话，录音时发送 PCM 到豆包 |
-| `src/pi/pages/doubao-realtime-demo.tsx` | 独立调试 Demo 页面 |
+| `src/back/pi/utils/doubao-realtime.ts` | 豆包端到端 WebSocket 客户端（二进制协议编解码、会话管理、PCM 播放） |
+| `src/back/pi/home/shake-hexagram.tsx` | 结果页自动初始化豆包会话，录音时发送 PCM 到豆包 |
+| `src/back/pi/pages/doubao-realtime-demo.tsx` | 独立调试 Demo 页面 |
 
 ### nginx 代理配置
 
