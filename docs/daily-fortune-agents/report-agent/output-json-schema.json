@@ -1,0 +1,40 @@
+{
+    "name": "pi_daily_fortune_report",
+    "description": "由当前值班十神生成每日运势报告。输出必须为严格 JSON，适合 TTS 朗读。",
+    "strict": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "reading": {
+                "type": "string",
+                "description": "运势正文，300字以内，口语化，TTS会朗读。体现十神视角，紧扣运势类型给出明确判断，用生活化比喻。"
+            },
+            "inscription": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "签文，恰好2个字符串，每个固定4个字。凝练当日运势精髓。例如 [\"桃花朵朵\", \"情缘如意\"]。"
+            },
+            "meaning": {
+                "type": "string",
+                "description": "辞意，一句话不超过30字，概括当日运势的核心启示。"
+            },
+            "fortune_index": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "运势指数，1-5星，基于流日干支与用户四柱的生克关系判断。1星最差，5星最好。"
+            },
+            "tags": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "3个运势标签，每个2-4字，概括当日运势关键词，与运势类型紧密相关。"
+            }
+        },
+        "required": ["reading", "inscription", "meaning", "fortune_index", "tags"],
+        "additionalProperties": false
+    }
+}
