@@ -1,0 +1,27 @@
+{
+    "name": "pi_special_day_report",
+    "description": "由当前值班十神解读特殊日。title/tags由规则数据提供，LLM只生成reading/inscription/meaning。输出必须为严格JSON。",
+    "strict": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "reading": {
+                "type": "string",
+                "description": "特殊日解读正文，300字以内，口语化，TTS会朗读。体现十神视角，结合特殊日含义和用户八字给出分析。"
+            },
+            "inscription": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "签文，恰好2个字符串，每个固定4个字。凝练今日特殊日精髓。例如 [\"守住节奏\", \"静待花开\"]。"
+            },
+            "meaning": {
+                "type": "string",
+                "description": "辞意，一句话不超过30字，概括特殊日对用户的核心启示。"
+            }
+        },
+        "required": ["reading", "inscription", "meaning"],
+        "additionalProperties": false
+    }
+}
