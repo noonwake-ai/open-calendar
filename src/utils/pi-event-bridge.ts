@@ -64,6 +64,7 @@ async function poll(): Promise<void> {
         const resp = await fetch(`${baseUrl}/state`)
         if (!resp.ok) return
         const data: PiStateResponse = await resp.json()
+        if (!data.latest) return // Reason: bridge 刚启动还没有任何按键事件时 latest 为 null
         const { seq, kind, action } = data.latest
 
         if (lastSeq === -1) {
