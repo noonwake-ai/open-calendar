@@ -28,15 +28,50 @@ interface PiStateResponse {
 
 const POLL_INTERVAL = 500
 const WARN_THROTTLE = 30_000
+const DEV = import.meta.env.DEV
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let lastSeq = -1
 let baseUrl = ''
 let bridgeStartedAt = ''
 let lastWarnTime = 0
+let stopped = false
+
+type FrontendLogEntry = {
+    ts: string
+    scope: string
+    message: string
+    extra?: unknown
+}
+
+function sendFrontendLog(entry: FrontendLogEntry): void {
+    if (!baseUrl) return
+    void fetch(`${baseUrl}/frontend-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+        keepalive: true,
+        mode: 'cors',
+    }).catch(() => {
+        // Reason: 日志上报失败不影响主流程
+    })
+}
+
+function logBridge(message: string, extra?: unknown): void {
+    if (DEV) {
+        if (extra === undefined) console.info(`[pi-event-bridge] ${message}`)
+        else console.info(`[pi-event-bridge] ${message}`, extra)
+    }
+    sendFrontendLog({ ts: new Date().toISOString(), scope: 'bridge', message, extra })
+}
+
+export function reportPiEventConsumerLog(scope: string, message: string, extra?: unknown): void {
+    if (DEV) console.info(`[pi-event-bridge] ${scope} ${message}`, extra)
+    sendFrontendLog({ ts: new Date().toISOString(), scope, message, extra })
+}
 
 function dispatchPiEvent(event: PiEvent): void {
-    // Reason: CustomEvent 带完整 detail，方便消费方按需读取字段（如 shake.text）
+    logBridge('dispatch', event)
     window.dispatchEvent(new CustomEvent(`pi:${event.kind}.${event.action}`, { detail: event }))
 }
 
@@ -48,13 +83,21 @@ async function initialize(): Promise<boolean> {
         const data: PiStateResponse = await resp.json()
         lastSeq = data.latest?.seq ?? 0
         bridgeStartedAt = data.startedAt
+        logBridge('initialized', { baseUrl, lastSeq, bridgeStartedAt })
         return true
     } catch {
+        logBridge('initialize failed')
         return false
     }
 }
 
 async function poll(): Promise<void> {
+    // Reason: 未初始化成功时 lastSeq=-1，不能直接打 /events，否则会回放历史事件
+    if (lastSeq < 0) {
+        await initialize()
+        return
+    }
+
     try {
         const resp = await fetch(`${baseUrl}/events?after_seq=${lastSeq}`)
         if (!resp.ok) return
@@ -66,8 +109,24 @@ async function poll(): Promise<void> {
             || (bridgeStartedAt && data.startedAt !== bridgeStartedAt)
 
         if (needResync) {
+            logBridge('resync required', {
+                lastSeq,
+                latestSeq: data.latest_seq,
+                overflow: data.overflow,
+                startedAt: data.startedAt,
+                bridgeStartedAt,
+            })
             await initialize()
             return
+        }
+
+        if (data.events.length > 0) {
+            logBridge('poll received events', {
+                count: data.events.length,
+                lastSeq,
+                latestSeq: data.latest_seq,
+                events: data.events,
+            })
         }
 
         // Reason: 按 seq 升序逐条 dispatch，确保消费方收到完整有序事件流
@@ -92,28 +151,36 @@ async function poll(): Promise<void> {
 function scheduleNext(): void {
     timer = setTimeout(async () => {
         await poll()
-        if (timer !== null) scheduleNext()
+        // Reason: stopped 守卫防止异步链路返回后继续调度（HMR dispose 竞态）
+        if (timer !== null && !stopped) scheduleNext()
     }, POLL_INTERVAL)
 }
 
 export function startPiEventBridge(): void {
     if (timer !== null) return
+    stopped = false
     getAppConfig().then(async config => {
+        // Reason: stop 可能在 getAppConfig 异步期间被调用，检查 stopped 防止继续
+        if (stopped) return
         const url = config.PI_EVENT_BRIDGE_URL
         if (!url) return
         baseUrl = url.replace(/\/$/, '')
+        logBridge('start requested', { baseUrl })
         await initialize()
+        if (stopped) return
         scheduleNext()
     }).catch(() => {
-        // Reason: 配置加载失败 → bridge 不启动，不影响主应用
+        logBridge('config load failed, bridge not started')
     })
 }
 
 export function stopPiEventBridge(): void {
+    stopped = true
     if (timer !== null) {
         clearTimeout(timer)
         timer = null
     }
+    logBridge('stopped', { lastSeq, baseUrl, bridgeStartedAt })
     lastSeq = -1
     baseUrl = ''
     bridgeStartedAt = ''

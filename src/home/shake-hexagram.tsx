@@ -16,6 +16,7 @@ import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
 import { publicAssetUrl } from '../utils/public-asset-url'
 import printer from '../utils/printer'
+import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
 
 const CARD_SIZE = 120
 const BASE_SPIN_SPEED = 8
@@ -45,6 +46,21 @@ interface ReportData {
     inscription: [string, string]
     meaning: string
     blessings: Array<{ item: string; date: string }>
+}
+
+function previewText(text: string, max = 240): string {
+    return text.length <= max ? text : `${text.slice(0, max)}...`
+}
+
+function formatErrorForLog(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+        return {
+            name: error.name,
+            message: error.message,
+            stack: error.stack ? previewText(error.stack, 400) : undefined,
+        }
+    }
+    return { message: String(error) }
 }
 
 interface SlotState {
@@ -366,8 +382,16 @@ function AudioSpectrum({ canRecord, hasRecordedOnce, onRecordStart, onRecordEnd,
 
     // Reason: 硬件语音按键 → 和空格键同样调用 startRecording/stopRecording
     useEffect(() => {
-        const onStart = () => startRecording()
-        const onStop = () => stopRecording()
+        const onStart = (event: Event) => {
+            const detail = event instanceof CustomEvent ? event.detail : undefined
+            reportPiEventConsumerLog('consumer:shake', 'record.start', detail)
+            void startRecording()
+        }
+        const onStop = (event: Event) => {
+            const detail = event instanceof CustomEvent ? event.detail : undefined
+            reportPiEventConsumerLog('consumer:shake', 'record.stop', detail)
+            stopRecording()
+        }
         window.addEventListener('pi:record.start', onStart)
         window.addEventListener('pi:record.stop', onStop)
         return () => {
@@ -544,7 +568,11 @@ export default function ShakeHexagram(): ReactElement {
 
     // Reason: 硬件摇杆触发 → 和 UI 按钮同样调用 startSpinning（守卫在 startSpinning 内部）
     useEffect(() => {
-        const onShake = () => startSpinning()
+        const onShake = (event: Event) => {
+            const detail = event instanceof CustomEvent ? event.detail : undefined
+            reportPiEventConsumerLog('consumer:shake', 'shake.trigger', detail)
+            startSpinning()
+        }
         window.addEventListener('pi:shake.trigger', onShake)
         return () => window.removeEventListener('pi:shake.trigger', onShake)
     }, [startSpinning])
@@ -583,15 +611,26 @@ export default function ShakeHexagram(): ReactElement {
         const upper = hexagramValue.slice(3)
         const lower = hexagramValue.slice(0, 3)
         const hexagramDesc = `${hexagramEntry.name}（上${hexagramName[upper]}下${hexagramName[lower]}）`
+        const hexagramNameForLog = hexagramEntry.name
 
         async function fetchReport() {
             const config = await getAppConfig()
             let answerText = ''
+            const question = questionRef.current || '请解卦'
+
+            reportPiEventConsumerLog('consumer:shake', 'report.request.start', {
+                question,
+                hexagramDesc,
+                hexagramValue,
+                difyBaseUrl: config.DIFY?.BASE_URL ?? '',
+                hasHexagramReportKey: Boolean(config.DIFY?.HEXAGRAM_REPORT_KEY),
+            })
+
             try {
                 const result = await dify.completionMessages(
                     { apiKey: config.DIFY?.HEXAGRAM_REPORT_KEY ?? '', baseUrl: config.DIFY?.BASE_URL ?? '' }, {
                     inputs: {
-                        question: questionRef.current || '请解卦',
+                        question,
                         current_time: getCurrentTimeWuxing(),
                         user_bazi_info: getBaziInfoStr(),
                         hexagram: hexagramDesc,
@@ -608,11 +647,25 @@ export default function ShakeHexagram(): ReactElement {
 
                 answerText = (result.answer ?? '').trim()
                 console.log('[解卦] blocking 返回长度:', answerText.length, '预览:', answerText.substring(0, 300))
+                reportPiEventConsumerLog('consumer:shake', 'report.request.success', {
+                    answerLength: answerText.length,
+                    answerPreview: previewText(answerText),
+                })
 
                 const jsonStr = cleanLLMResponse(answerText)
                 if (!jsonStr) throw new Error('Dify 返回内容为空')
+                reportPiEventConsumerLog('consumer:shake', 'report.json.cleaned', {
+                    jsonLength: jsonStr.length,
+                    jsonPreview: previewText(jsonStr),
+                })
 
                 const data = JSON.parse(jsonStr) as ReportData
+                reportPiEventConsumerLog('consumer:shake', 'report.parse.success', {
+                    inscription: data.inscription,
+                    meaning: data.meaning,
+                    readingLength: data.reading?.length ?? 0,
+                    blessingsCount: data.blessings?.length ?? 0,
+                })
                 if (!cancelled) {
                     setReportData(data)
                     setStep('result')
@@ -621,9 +674,19 @@ export default function ShakeHexagram(): ReactElement {
 
                 // 保存赐福事项到本地数据库
                 if (data.blessings.length > 0) {
-                    saveBlessings(data.blessings, hexagramEntry!.name, questionRef.current || '').catch(e =>
+                    reportPiEventConsumerLog('consumer:shake', 'report.blessings.save.start', {
+                        blessingsCount: data.blessings.length,
+                        hexagramName: hexagramNameForLog,
+                        question,
+                    })
+                    saveBlessings(data.blessings, hexagramNameForLog, question).catch(e => {
+                        reportPiEventConsumerLog('consumer:shake', 'report.blessings.save.failed', {
+                            error: formatErrorForLog(e),
+                            blessingsCount: data.blessings.length,
+                            hexagramName: hexagramNameForLog,
+                        })
                         console.error('保存赐福事项失败:', e)
-                    )
+                    })
                 }
 
                 // TTS 播放解读 — onStateChange 同步副屏
@@ -639,6 +702,13 @@ export default function ShakeHexagram(): ReactElement {
                 ttsPlayer.feed(data.reading)
                 ttsPlayer.flush()
             } catch (e) {
+                reportPiEventConsumerLog('consumer:shake', 'report.request.failed', {
+                    error: formatErrorForLog(e),
+                    question,
+                    hexagramDesc,
+                    answerLength: answerText.length,
+                    answerPreview: previewText(answerText, 500),
+                })
                 console.error('解卦失败:', e, '\nanswerText长度:', answerText.length, '\n预览:', answerText.substring(0, 500))
                 if (!cancelled) {
                     setReportData({
