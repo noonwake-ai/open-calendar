@@ -367,7 +367,7 @@ function AudioSpectrum({ canRecord, hasRecordedOnce, onRecordStart, onRecordEnd,
     return (
         <div style={spectrumWrapStyle}>
             <p style={spectrumLabelStyle}>
-                {isRecording ? '正在收音...' : hasRecordedOnce ? '按住语音键（空格键）可继续补充' : '按住语音键（空格键）说话'}
+                {isRecording ? '正在收音...' : hasRecordedOnce ? '按住语音键可继续补充' : '按住语音键说话'}
             </p>
             <div style={spectrumBarsStyle}>
                 {Array.from({ length: SPECTRUM_BARS }, (_, i) => (
@@ -530,8 +530,10 @@ export default function ShakeHexagram(): ReactElement {
     const handleRecordEnd = useCallback((transcript?: string) => {
         if (transcript) setHasRecordedOnce(true)
         if (step === 'asking' || step === 'ready') {
-            if (transcript) questionRef.current = transcript
-            setStep('ready')
+            if (transcript) {
+                questionRef.current = transcript
+                setStep('ready')
+            }
         }
         // result 步骤完全走豆包端到端，不再 fallback Dify
     }, [step])
