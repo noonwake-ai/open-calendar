@@ -477,9 +477,11 @@ export default function SpecialDayDetail(): ReactElement {
             </div>
 
             <div style={rightPanelStyle}>
-                <PrintSignCard topText={ganzhiDate} line1={signLine1} line2={signLine2}
-                    bottomText={title} accentColor={accentColor} buttonLabel="打印签文"
-                    onPrint={() => printer.print(signLine1, signLine2)} />
+                {!loading && (
+                    <PrintSignCard topText={ganzhiDate} line1={signLine1} line2={signLine2}
+                        bottomText={title} accentColor={accentColor} buttonLabel="打印签文"
+                        onPrint={() => printer.print(signLine1, signLine2)} />
+                )}
             </div>
         </div>
     )

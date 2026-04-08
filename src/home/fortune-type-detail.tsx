@@ -277,15 +277,17 @@ export default function FortuneTypeDetail(): ReactElement {
 
             {/* ── 右侧：运签卡片 ── */}
             <div style={rightPanelStyle}>
-                <PrintSignCard
-                    topText={ganzhiDate}
-                    line1={line1}
-                    line2={line2}
-                    bottomText={label}
-                    accentColor={accentColor}
-                    buttonLabel="打印运签"
-                    onPrint={() => printer.print(line1, line2)}
-                />
+                {!loading && (
+                    <PrintSignCard
+                        topText={ganzhiDate}
+                        line1={line1}
+                        line2={line2}
+                        bottomText={label}
+                        accentColor={accentColor}
+                        buttonLabel="打印运签"
+                        onPrint={() => printer.print(line1, line2)}
+                    />
+                )}
             </div>
         </div>
     )
