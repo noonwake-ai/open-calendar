@@ -1,0 +1,46 @@
+{
+    "name": "pi_hexagram_report",
+    "description": "根据用户的卦象、问题与生辰信息，由当前值班十神给出简短灵纹解读。输出必须为严格 JSON，适合 TTS 朗读。",
+    "strict": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "reading": {
+                "type": "string",
+                "description": "简短的灵纹解读，200字以内，口语化，TTS会朗读。要体现当前十神的独特视角，紧扣用户问题给出明确判断，用生活化比喻，不说空话套话。"
+            },
+            "inscription": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "签文，恰好2个字符串，每个固定4个字。凝练灵纹精髓，与用户问题和灵纹解读呼应。例如 [\"顺势而为\", \"天地通达\"]。"
+            },
+            "meaning": {
+                "type": "string",
+                "description": "辞意，一句话不超过30字，概括灵纹对用户问题的核心启示。"
+            },
+            "blessings": {
+                "type": "array",
+                "description": "需要赐福的事项列表，可为空数组。当用户问题涉及具体行动、决策、时机时给出；笼统感受类问题可为空。",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item": {
+                            "type": "string",
+                            "description": "赐福事项的简短描述，像待办一样简洁明确。"
+                        },
+                        "date": {
+                            "type": "string",
+                            "description": "具体日期，格式 YYYY-MM-DD，根据当前时间推算出合适的日期。"
+                        }
+                    },
+                    "required": ["item", "date"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["reading", "inscription", "meaning", "blessings"],
+        "additionalProperties": false
+    }
+}
