@@ -10,13 +10,7 @@
 import axios from 'axios'
 import { getAppConfig } from '../config/runtime'
 import type { ApiDef } from './contracts'
-
-// Reason: getDeviceToken 在 Commit 4 迁移 utils/device.ts 后替换为真实实现
-let _getDeviceToken: () => string | null = () => localStorage.getItem('device_token')
-
-export function setDeviceTokenGetter(getter: () => string | null) {
-    _getDeviceToken = getter
-}
+import { getDeviceToken } from '../utils/device'
 
 type ApiResp<T> = { data?: T; error?: { code?: number; msg: string } }
 
@@ -32,7 +26,7 @@ export async function callApi<REQ, RESP>(
 
     const resp = await axios.post<ApiResp<RESP>>(api.path, params, {
         baseURL,
-        headers: { Authorization: _getDeviceToken() ?? '' },
+        headers: { Authorization: getDeviceToken() ?? '' },
     })
 
     const body = resp.data
