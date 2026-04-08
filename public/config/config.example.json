@@ -1,6 +1,7 @@
 {
     "BASE_URL": "https://apis.noonwake.net",
     "ASR_WS_URL": "ws://127.0.0.1:6006",
+    "PI_EVENT_BRIDGE_URL": "/pi-bridge",
     "DIFY": {
         "BASE_URL": "https://dify-cn.noonwake.net/v1",
         "HEXAGRAM_REPORT_KEY": "app-xxx",

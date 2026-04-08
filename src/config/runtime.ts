@@ -4,6 +4,7 @@ export type AppConfig = {
     BASE_URL: string
     DEVICE_TOKEN?: string
     ASR_WS_URL?: string
+    PI_EVENT_BRIDGE_URL?: string
     DIFY?: {
         BASE_URL: string
         HEXAGRAM_REPORT_KEY: string

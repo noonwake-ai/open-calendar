@@ -1,4 +1,4 @@
-import React, { ReactElement, useEffect, useState } from 'react'
+import React, { ReactElement, useEffect, useRef, useState } from 'react'
 import { getProjectionVideos } from '../video/tengod-projection-videos'
 import { listenProjectionChannel } from '../utils/projection-channel'
 import { TengodId } from '../common/utils/bazi'
@@ -11,10 +11,15 @@ const DEMO_TENGOD_ID = TengodId.SHISHEN
 export default function ProjectionScreen(): ReactElement {
     const [videoIndex, setVideoIndex] = useState(0)
     const [scene, setScene] = useState<ProjectionScene>('idle')
+    // Reason: BroadcastChannel 回调在 useEffect 闭包中，直接读 scene 会是旧值
+    const sceneRef = useRef(scene)
+    sceneRef.current = scene
 
     useEffect(() => {
         return listenProjectionChannel((msg) => {
             if (msg.type === 'trigger_scene') {
+                // Reason: 解卦/摇卦中不响应唤醒，避免打断当前场景
+                if (msg.scene === 'wake' && sceneRef.current !== 'idle') return
                 if (msg.scene === 'idle') {
                     // 主动回到待机：重置到 idle 循环
                     setScene('idle')

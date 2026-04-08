@@ -1,5 +1,5 @@
 export type ProjectionChannelMsg =
-    | { type: 'trigger_scene'; scene: 'interpret' | 'casting' | 'idle'; tts_content?: string }
+    | { type: 'trigger_scene'; scene: 'interpret' | 'casting' | 'idle' | 'wake'; tts_content?: string }
 
 const CHANNEL_NAME = 'pi-projection'
 

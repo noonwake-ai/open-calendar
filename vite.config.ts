@@ -30,6 +30,11 @@ export default defineConfig({
                 target: apiTarget,
                 changeOrigin: true,
             },
+            '/pi-bridge': {
+                target: 'http://127.0.0.1:8765',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/pi-bridge/, ''),
+            },
             '/volcan-tts': {
                 target: 'https://openspeech.bytedance.com',
                 changeOrigin: true,

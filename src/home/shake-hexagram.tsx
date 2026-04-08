@@ -364,6 +364,18 @@ function AudioSpectrum({ canRecord, hasRecordedOnce, onRecordStart, onRecordEnd,
         return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
     }, [startRecording, stopRecording])
 
+    // Reason: 硬件语音按键 → 和空格键同样调用 startRecording/stopRecording
+    useEffect(() => {
+        const onStart = () => startRecording()
+        const onStop = () => stopRecording()
+        window.addEventListener('pi:record.start', onStart)
+        window.addEventListener('pi:record.stop', onStop)
+        return () => {
+            window.removeEventListener('pi:record.start', onStart)
+            window.removeEventListener('pi:record.stop', onStop)
+        }
+    }, [startRecording, stopRecording])
+
     const barBg = isRecording ? colors.brand.main : brandAlpha(0.32)
 
     return (
@@ -521,13 +533,21 @@ export default function ShakeHexagram(): ReactElement {
     }, [])
 
     const startSpinning = useCallback(() => {
+        if (step !== 'ready') return // Reason: 防御性守卫，硬件事件可能绕过 UI 状态
         setStep('spinning')
         setCollectedResults(Array(6).fill(null))
         setStoppingMask(Array(6).fill(false))
         setSpinning(Array(6).fill(true))
         spinStartRef.current = Date.now()
         autoStopTimerRef.current = setTimeout(stopSpinning, AUTO_STOP_MS)
-    }, [stopSpinning])
+    }, [step, stopSpinning])
+
+    // Reason: 硬件摇杆触发 → 和 UI 按钮同样调用 startSpinning（守卫在 startSpinning 内部）
+    useEffect(() => {
+        const onShake = () => startSpinning()
+        window.addEventListener('pi:shake.trigger', onShake)
+        return () => window.removeEventListener('pi:shake.trigger', onShake)
+    }, [startSpinning])
 
     const handleRecordEnd = useCallback((transcript?: string) => {
         if (transcript) setHasRecordedOnce(true)
