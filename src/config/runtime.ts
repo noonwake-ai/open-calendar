@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+declare const __APP_CONFIG_FILE__: string
+
 export type AppConfig = {
     BASE_URL: string
     DEVICE_TOKEN?: string
@@ -19,7 +21,7 @@ export type AppConfig = {
     }
 }
 
-// Reason: Promise 去重，防止并发调用（如 TTS PREFETCH=3）重复请求 config.json
+// Reason: Promise 去重，防止并发调用（如 TTS PREFETCH=3）重复请求运行时配置
 let configPromise: Promise<AppConfig> | null = null
 
 /**
@@ -30,9 +32,11 @@ export async function getAppConfig(): Promise<AppConfig> {
         return (window as any).APP_CONFIG
     }
     if (!configPromise) {
-        const configUrl = `${import.meta.env.BASE_URL}config/config.json`
+        const fallbackConfigFile = import.meta.env.DEV ? 'config.dev.json' : 'config.json'
+        const configFile = typeof __APP_CONFIG_FILE__ === 'string' ? __APP_CONFIG_FILE__ : fallbackConfigFile
+        const configUrl = `${import.meta.env.BASE_URL}config/${configFile}`
         configPromise = axios.get<AppConfig>(configUrl).then(res => {
-            // Reason: dev 下 BASE_URL 用 '/' 走 Vite proxy，其余字段（DIFY/DOUBAO）仍从 config.json 读取
+            // Reason: dev 下 BASE_URL 用 '/' 走 Vite proxy，其余字段仍从开发配置文件读取
             const config = import.meta.env.DEV
                 ? { ...res.data, BASE_URL: '/' }
                 : res.data

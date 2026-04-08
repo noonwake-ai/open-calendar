@@ -35,7 +35,7 @@ async function synthesize(text: string, voiceType: string, options?: {
         audioConfig.enable_emotion = true
     }
 
-    // Reason: APPID / ACCESS_TOKEN 已移入 config.json (DOUBAO 节点)，避免硬编码密钥
+    // Reason: APPID / ACCESS_TOKEN 已移入运行时配置 (DOUBAO 节点)，避免硬编码密钥
     const config = await getAppConfig()
     const appId = config.DOUBAO?.APP_ID ?? ''
     const accessToken = config.DOUBAO?.ACCESS_KEY ?? ''

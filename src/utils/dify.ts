@@ -3,6 +3,8 @@
  * 从 src/back/llm/dify.ts 移植，适配浏览器环境
  */
 
+import { reportPiEventConsumerLog } from './pi-event-bridge'
+
 // ========== Types ==========
 
 type Int = number
@@ -300,6 +302,55 @@ type CompletionMessagesChunk = Omit<MessageChunk, 'conversation_id'>
 
 const MAX_DIFY_IMAGES = 4
 
+function previewText(text: string | undefined, maxLength = 240): string {
+    if (!text) return ''
+    if (text.length <= maxLength) return text
+    return `${text.slice(0, maxLength)}...`
+}
+
+function previewValue(value: unknown, maxLength = 240): unknown {
+    if (typeof value === 'string') return previewText(value, maxLength)
+    if (Array.isArray(value)) return value.slice(0, 5).map(item => previewValue(item, maxLength))
+    if (value && typeof value === 'object') {
+        const result: Record<string, unknown> = {}
+        for (const [key, item] of Object.entries(value)) {
+            result[key] = previewValue(item, maxLength)
+        }
+        return result
+    }
+    return value
+}
+
+function formatErrorForLog(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+        return {
+            name: error.name,
+            message: error.message,
+            stack: previewText(error.stack, 600),
+        }
+    }
+    return { value: String(error) }
+}
+
+function logDify(message: string, extra?: unknown): void {
+    reportPiEventConsumerLog('consumer:dify', message, extra)
+}
+
+function buildCompletionRequestLog(config: DifyReqConfig, body: DifyCompletionMessagesReqBody & { response_mode: 'blocking' | 'streaming' }): Record<string, unknown> {
+    return {
+        url: `${config.baseUrl}/completion-messages`,
+        baseUrl: config.baseUrl,
+        hasApiKey: Boolean(config.apiKey),
+        responseMode: body.response_mode,
+        user: body.user,
+        hasUser: Boolean(body.user),
+        inputKeys: Object.keys(body.inputs ?? {}),
+        inputs: previewValue(body.inputs ?? {}),
+        fileCount: body.files?.length ?? 0,
+        online: globalThis.navigator?.onLine,
+    }
+}
+
 function limitImageFiles<T extends { type: string }>(files: T[] | undefined): T[] | undefined {
     if (!files) return files
     const imageCount = files.filter(f => f.type === 'image').length
@@ -465,10 +516,15 @@ async function completionMessages(config: DifyReqConfig, body: CompletionMessage
 async function completionMessages(config: DifyReqConfig, body: CompletionMessagesReqBodyBlock | CompletionMessagesReqBodyStream): Promise<CompletionMessagesRes | AsyncGenerator<CompletionMessagesChunk>> {
     const { apiKey, baseUrl } = config
     body.files = compressDifyImageFiles(limitImageFiles(body.files) ?? body.files) ?? body.files
+    const url = `${baseUrl}/completion-messages`
+    const startedAt = Date.now()
+    const requestLog = buildCompletionRequestLog(config, body)
 
     try {
         const streaming = body.response_mode === 'streaming'
-        const response = await fetch(`${baseUrl}/completion-messages`, {
+        logDify('completion.request.start', requestLog)
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -477,17 +533,47 @@ async function completionMessages(config: DifyReqConfig, body: CompletionMessage
             body: JSON.stringify(body),
         })
 
+        logDify('completion.request.response', {
+            ...requestLog,
+            status: response.status,
+            ok: response.ok,
+            redirected: response.redirected,
+            responseType: response.type,
+            responseUrl: response.url,
+            contentType: response.headers.get('content-type'),
+            durationMs: Date.now() - startedAt,
+        })
+
         if (!response.ok) {
             const errBody = await response.text().catch(() => '')
+            logDify('completion.request.http_error', {
+                ...requestLog,
+                status: response.status,
+                durationMs: Date.now() - startedAt,
+                errorBody: previewText(errBody, 800),
+            })
             throw new Error(`Dify completion error: HTTP ${response.status} ${errBody}`)
         }
 
         if (streaming) {
             return parseBrowserSSEStream<CompletionMessagesChunk>(response)
         } else {
-            return await response.json() as CompletionMessagesRes
+            const data = await response.json() as CompletionMessagesRes
+            logDify('completion.request.success', {
+                ...requestLog,
+                durationMs: Date.now() - startedAt,
+                answerLength: data.answer?.length ?? 0,
+                answerPreview: previewText(data.answer, 240),
+                messageId: data.message_id,
+            })
+            return data
         }
     } catch (e) {
+        logDify('completion.request.failed', {
+            ...requestLog,
+            durationMs: Date.now() - startedAt,
+            error: formatErrorForLog(e),
+        })
         console.error('dify completion-messages 异常:', e)
         throw e
     }

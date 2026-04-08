@@ -4,7 +4,8 @@ dist-pi/
 .DS_Store
 *.local
 .env.local
-public/config/config.json
+public/config/config.dev.json
+public/config/config.pi.json
 .idea/
 .vscode/
 *.tsbuildinfo

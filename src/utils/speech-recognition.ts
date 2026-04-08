@@ -24,7 +24,7 @@ interface SpeechRecognitionErrorEvent extends Event { error: string; message: st
  * 语音识别统一接口
  * - Chrome 环境：使用浏览器原生 webkitSpeechRecognition
  * - 树莓派环境：通过 WebSocket 连接本地 Sherpa-onnx ASR 服务
- * 根据 config.json 的 ASR_WS_URL 自动切换
+ * 根据运行时配置中的 ASR_WS_URL 自动切换
  */
 
 import { getAppConfig } from './api'

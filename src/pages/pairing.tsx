@@ -99,7 +99,7 @@ export default function Pairing(): ReactElement {
         }
 
         ;(async () => {
-            // 先检查 config.json 预置 token（demo 兼容）
+            // 先检查运行时配置里的预置 token（demo 兼容）
             try {
                 const config = await getAppConfig()
                 if (config.DEVICE_TOKEN) {
