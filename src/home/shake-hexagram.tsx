@@ -532,6 +532,7 @@ export default function ShakeHexagram(): ReactElement {
         if (step === 'asking' || step === 'ready') {
             if (transcript) {
                 questionRef.current = transcript
+                console.log('[摇卦] question:', transcript)
                 setStep('ready')
             }
         }

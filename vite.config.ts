@@ -35,7 +35,7 @@ export default defineConfig({
                 rewrite: (path) => path.replace(/^\/volcan-tts/, '/api/v1/tts'),
             },
             '/doubao-realtime': {
-                target: 'wss://openspeech.bytedance.com',
+                target: 'https://openspeech.bytedance.com',
                 ws: true,
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/doubao-realtime/, '/api/v3/realtime/dialogue'),
