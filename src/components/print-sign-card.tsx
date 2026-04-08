@@ -1,9 +1,14 @@
-import React, { ReactElement } from 'react'
+import React, { ReactElement, useCallback, useEffect, useRef, useState } from 'react'
 import { colors, fontSize, fontWeight, radius, spacing } from '../styles/tokens'
+import { publicAssetUrl } from '../utils/public-asset-url'
+import type { PrintResult } from '../utils/printer'
 
 // 卡片尺寸：宽 260px，高按背景图旋转后比例 260 × (2048/1374) ≈ 388px
 const CARD_W = 260
 const CARD_H = 388
+const RESET_DELAY = 2000
+
+type PrintStatus = 'idle' | 'printing' | 'success' | 'error'
 
 interface PrintSignCardProps {
     topText: string            // 顶部小字（如干支日期）
@@ -12,7 +17,8 @@ interface PrintSignCardProps {
     bottomText: string         // 底部小字（如类型名称）
     accentColor: string        // 主题色（仅用于按钮等）
     buttonLabel?: string       // 打印按钮文案，默认"打印签文"
-    onPrint?: () => void
+    onPrint?: () => Promise<PrintResult>
+    disabled?: boolean
 }
 
 export default function PrintSignCard({
@@ -22,8 +28,42 @@ export default function PrintSignCard({
     bottomText,
     accentColor,
     buttonLabel = '打印签文',
-    onPrint = () => window.alert('正在连接热敏打印机...'),
+    onPrint = async () => ({ ok: false, error: '打印功能未接入' }),
+    disabled = false,
 }: PrintSignCardProps): ReactElement {
+    const [status, setStatus] = useState<PrintStatus>('idle')
+    const timerRef = useRef<ReturnType<typeof setTimeout>>()
+
+    useEffect(() => {
+        return () => clearTimeout(timerRef.current)
+    }, [])
+
+    const handlePrint = useCallback(async () => {
+        if (disabled || status === 'printing') return
+        clearTimeout(timerRef.current)
+        setStatus('printing')
+        try {
+            const result = await onPrint()
+            setStatus(result.ok ? 'success' : 'error')
+            if (!result.ok && result.error) {
+                window.alert(result.error)
+            }
+        } catch {
+            setStatus('error')
+            window.alert('打印失败，请检查打印机连接')
+        }
+        timerRef.current = setTimeout(() => setStatus('idle'), RESET_DELAY)
+    }, [disabled, onPrint, status])
+
+    const isDisabled = disabled || status === 'printing'
+    const resolvedButtonLabel = status === 'idle'
+        ? buttonLabel
+        : status === 'printing'
+            ? '打印中...'
+            : status === 'success'
+                ? '打印成功'
+                : '打印失败'
+
     return (
         <div style={wrapperStyle}>
             {/* 签文卡片 */}
@@ -37,10 +77,16 @@ export default function PrintSignCard({
                 </div>
             </div>
             <button
-                onClick={onPrint}
-                style={{ ...printBtnStyle, background: accentColor }}
+                onClick={() => { void handlePrint() }}
+                disabled={isDisabled}
+                style={{
+                    ...printBtnStyle,
+                    background: accentColor,
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                    opacity: isDisabled ? 0.6 : 1,
+                }}
             >
-                {buttonLabel}
+                {resolvedButtonLabel}
             </button>
         </div>
     )
@@ -75,7 +121,7 @@ const bgLayerStyle: React.CSSProperties = {
     top: '50%',
     left: '50%',
     transform: `translate(-50%, -50%) rotate(90deg)`,
-    backgroundImage: 'url(/print-bg.jpg)',
+    backgroundImage: `url(${publicAssetUrl('print-bg.jpg')})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     zIndex: 0,

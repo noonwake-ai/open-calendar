@@ -3,7 +3,7 @@
  * 对接树莓派本地打印服务 (ESC/POS)
  */
 
-const PRINTER_BASE_URL = 'http://192.168.5.212:8787'
+const PRINTER_BASE_URL = '/printer'
 const PRINT_TIMEOUT = 10000
 
 export type PrintResult = { ok: boolean; error?: string }

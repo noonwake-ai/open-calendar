@@ -15,6 +15,8 @@ import { getAppConfig } from '../utils/api'
 import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
 import { GanInfo, WuXing2Name, WuXing, ZhiInfo } from '../common/utils/bazi'
+import { publicAssetUrl } from '../utils/public-asset-url'
+import printer from '../utils/printer'
 
 interface SpecialDayState {
     title: string
@@ -57,34 +59,34 @@ const Wuxing2Color: Record<WuXing, string> = {
 }
 
 const solarBannerMap: Record<string, string> = {
-    立春: '/solar-banner/lichun.png', 雨水: '/solar-banner/yushui.png',
-    惊蛰: '/solar-banner/jingzhe.png', 春分: '/solar-banner/chunfen.png',
-    清明: '/solar-banner/qingming.png', 谷雨: '/solar-banner/guyu.png',
-    立夏: '/solar-banner/lixia.png', 小满: '/solar-banner/xiaoman.png',
-    芒种: '/solar-banner/mangzhong.png', 夏至: '/solar-banner/xiazhi.png',
-    小暑: '/solar-banner/xiaoshu.png', 大暑: '/solar-banner/dashu.png',
-    立秋: '/solar-banner/liqiu.png', 处暑: '/solar-banner/chushu.png',
-    白露: '/solar-banner/bailu.png', 秋分: '/solar-banner/qiufen.png',
-    寒露: '/solar-banner/hanlu.png', 霜降: '/solar-banner/shuangjiang.png',
-    立冬: '/solar-banner/lidong.png', 小雪: '/solar-banner/xiaoxue.png',
-    大雪: '/solar-banner/daxue.png', 冬至: '/solar-banner/dongzhi.png',
-    小寒: '/solar-banner/xiaohan.png', 大寒: '/solar-banner/dahan.png',
+    立春: publicAssetUrl('solar-banner/lichun.png'), 雨水: publicAssetUrl('solar-banner/yushui.png'),
+    惊蛰: publicAssetUrl('solar-banner/jingzhe.png'), 春分: publicAssetUrl('solar-banner/chunfen.png'),
+    清明: publicAssetUrl('solar-banner/qingming.png'), 谷雨: publicAssetUrl('solar-banner/guyu.png'),
+    立夏: publicAssetUrl('solar-banner/lixia.png'), 小满: publicAssetUrl('solar-banner/xiaoman.png'),
+    芒种: publicAssetUrl('solar-banner/mangzhong.png'), 夏至: publicAssetUrl('solar-banner/xiazhi.png'),
+    小暑: publicAssetUrl('solar-banner/xiaoshu.png'), 大暑: publicAssetUrl('solar-banner/dashu.png'),
+    立秋: publicAssetUrl('solar-banner/liqiu.png'), 处暑: publicAssetUrl('solar-banner/chushu.png'),
+    白露: publicAssetUrl('solar-banner/bailu.png'), 秋分: publicAssetUrl('solar-banner/qiufen.png'),
+    寒露: publicAssetUrl('solar-banner/hanlu.png'), 霜降: publicAssetUrl('solar-banner/shuangjiang.png'),
+    立冬: publicAssetUrl('solar-banner/lidong.png'), 小雪: publicAssetUrl('solar-banner/xiaoxue.png'),
+    大雪: publicAssetUrl('solar-banner/daxue.png'), 冬至: publicAssetUrl('solar-banner/dongzhi.png'),
+    小寒: publicAssetUrl('solar-banner/xiaohan.png'), 大寒: publicAssetUrl('solar-banner/dahan.png'),
 }
 
 const riZhuMap: Record<string, string> = {
-    甲: '/ri-zhu/jiamu.png', 乙: '/ri-zhu/yimu.png',
-    丙: '/ri-zhu/binghuo.png', 丁: '/ri-zhu/dinghuo.png',
-    戊: '/ri-zhu/wutu.png', 己: '/ri-zhu/jitu.png',
-    庚: '/ri-zhu/gengjin.png', 辛: '/ri-zhu/xinjin.png',
-    壬: '/ri-zhu/renshui.png', 癸: '/ri-zhu/guishui.png',
+    甲: publicAssetUrl('ri-zhu/jiamu.png'), 乙: publicAssetUrl('ri-zhu/yimu.png'),
+    丙: publicAssetUrl('ri-zhu/binghuo.png'), 丁: publicAssetUrl('ri-zhu/dinghuo.png'),
+    戊: publicAssetUrl('ri-zhu/wutu.png'), 己: publicAssetUrl('ri-zhu/jitu.png'),
+    庚: publicAssetUrl('ri-zhu/gengjin.png'), 辛: publicAssetUrl('ri-zhu/xinjin.png'),
+    壬: publicAssetUrl('ri-zhu/renshui.png'), 癸: publicAssetUrl('ri-zhu/guishui.png'),
 }
 
 const tenGodImgMap: Record<string, string> = {
-    比肩: '/ten-god/bijian.png', 劫财: '/ten-god/jiecai.png',
-    食神: '/ten-god/shishen.png', 伤官: '/ten-god/shangguan.png',
-    偏财: '/ten-god/piancai.png', 正财: '/ten-god/zhengcai.png',
-    七杀: '/ten-god/qisha.png', 正官: '/ten-god/zhengguan.png',
-    偏印: '/ten-god/pianyin.png', 正印: '/ten-god/zhengyin.png',
+    比肩: publicAssetUrl('ten-god/bijian.png'), 劫财: publicAssetUrl('ten-god/jiecai.png'),
+    食神: publicAssetUrl('ten-god/shishen.png'), 伤官: publicAssetUrl('ten-god/shangguan.png'),
+    偏财: publicAssetUrl('ten-god/piancai.png'), 正财: publicAssetUrl('ten-god/zhengcai.png'),
+    七杀: publicAssetUrl('ten-god/qisha.png'), 正官: publicAssetUrl('ten-god/zhengguan.png'),
+    偏印: publicAssetUrl('ten-god/pianyin.png'), 正印: publicAssetUrl('ten-god/zhengyin.png'),
 }
 
 function getGanzhiDate(): string {
@@ -476,7 +478,8 @@ export default function SpecialDayDetail(): ReactElement {
 
             <div style={rightPanelStyle}>
                 <PrintSignCard topText={ganzhiDate} line1={signLine1} line2={signLine2}
-                    bottomText={title} accentColor={accentColor} buttonLabel="打印签文" />
+                    bottomText={title} accentColor={accentColor} buttonLabel="打印签文"
+                    onPrint={() => printer.print(signLine1, signLine2)} />
             </div>
         </div>
     )

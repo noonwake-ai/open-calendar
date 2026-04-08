@@ -14,6 +14,8 @@ import dify from '../utils/dify'
 import { getAppConfig } from '../utils/api'
 import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
+import { publicAssetUrl } from '../utils/public-asset-url'
+import printer from '../utils/printer'
 
 const CARD_SIZE = 120
 const BASE_SPIN_SPEED = 8
@@ -166,7 +168,7 @@ function Slot({ isSpinning, shouldStop, slotIndex, onStopped }: {
                 {cards.map((sym, i) => (
                     <div key={i} style={slotCardStyle}>
                         <img
-                            src={sym === '1' ? '/totem-yang.png' : '/totem-yin.png'}
+                            src={sym === '1' ? publicAssetUrl('totem-yang.png') : publicAssetUrl('totem-yin.png')}
                             alt={sym === '1' ? '阳' : '阴'}
                             style={{ width: CARD_SIZE - 16, height: CARD_SIZE - 16, opacity, filter: imgFilter, transition: 'opacity 0.3s, filter 0.3s' }}
                         />
@@ -729,6 +731,10 @@ export default function ShakeHexagram(): ReactElement {
                                 line2={reportData.inscription[1] || hexagramEntry.name + '卦'}
                                 bottomText={hexagramEntry.name + ' 卦'}
                                 accentColor={colors.brand.main}
+                                onPrint={() => printer.print(
+                                    reportData.inscription[0],
+                                    reportData.inscription[1] || hexagramEntry.name + '卦',
+                                )}
                             />
                         </div>
                     )}

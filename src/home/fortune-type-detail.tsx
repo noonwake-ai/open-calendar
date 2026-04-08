@@ -16,6 +16,7 @@ import dify from '../utils/dify'
 import { getAppConfig } from '../utils/api'
 import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
+import printer from '../utils/printer'
 
 const FORTUNE_TYPE_COLORS: Record<string, string> = {
     love: colors.fortune.love,
@@ -283,6 +284,7 @@ export default function FortuneTypeDetail(): ReactElement {
                     bottomText={label}
                     accentColor={accentColor}
                     buttonLabel="打印运签"
+                    onPrint={() => printer.print(line1, line2)}
                 />
             </div>
         </div>

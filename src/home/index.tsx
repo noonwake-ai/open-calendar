@@ -13,16 +13,17 @@ import { SolarDay } from 'tyme4ts'
 import { INITIAL_TODOS, formatDateKey } from './todo-calendar'
 import { buildTodoCategoryMap, TODO_CATEGORY_COLORS } from './todo-meta'
 import { getAllFortuneViewedTags, saveFortuneViewedTags } from '../utils/fortune-viewed-store'
+import { publicAssetUrl } from '../utils/public-asset-url'
 
 type HomeData = NonNullable<typeof apis.pi.home.today['_resp']>
 
 const WEEKDAYS_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const FORTUNE_ITEMS = [
-    { key: 'love',   icon: '♥', cnTitle: '桃花', color: TODO_CATEGORY_COLORS.love,   image: '/fortune-love.png' },
-    { key: 'career', icon: '❖', cnTitle: '事业', color: TODO_CATEGORY_COLORS.career, image: '/fortune-career.png' },
-    { key: 'wealth', icon: '¥', cnTitle: '财运', color: TODO_CATEGORY_COLORS.wealth, image: '/fortune-wealth.png' },
-    { key: 'study',  icon: '✎', cnTitle: '学业', color: TODO_CATEGORY_COLORS.study,  image: '/fortune-study.png' },
+    { key: 'love',   icon: '♥', cnTitle: '桃花', color: TODO_CATEGORY_COLORS.love,   image: publicAssetUrl('fortune-love.png') },
+    { key: 'career', icon: '❖', cnTitle: '事业', color: TODO_CATEGORY_COLORS.career, image: publicAssetUrl('fortune-career.png') },
+    { key: 'wealth', icon: '¥', cnTitle: '财运', color: TODO_CATEGORY_COLORS.wealth, image: publicAssetUrl('fortune-wealth.png') },
+    { key: 'study',  icon: '✎', cnTitle: '学业', color: TODO_CATEGORY_COLORS.study,  image: publicAssetUrl('fortune-study.png') },
 ] as const
 
 // 扇形旋转角度：从负到正均匀分布

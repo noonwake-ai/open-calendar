@@ -17,9 +17,10 @@ const doubao = config.DOUBAO ?? {}
 const apiTarget = process.env.API_TARGET || config.BASE_URL || 'https://apis.test.noonwake.net'
 
 export default defineConfig({
+    base: '/pi/',
     plugins: [react()],
     build: {
-        outDir: 'dist',
+        outDir: 'dist-pi',
     },
     server: {
         host: '0.0.0.0',
