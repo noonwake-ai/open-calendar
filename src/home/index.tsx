@@ -14,6 +14,7 @@ import { INITIAL_TODOS, formatDateKey } from './todo-calendar'
 import { buildTodoCategoryMap, TODO_CATEGORY_COLORS } from './todo-meta'
 import { getAllFortuneViewedTags, saveFortuneViewedTags } from '../utils/fortune-viewed-store'
 import { publicAssetUrl } from '../utils/public-asset-url'
+import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
 
 type HomeData = NonNullable<typeof apis.pi.home.today['_resp']>
 
@@ -100,6 +101,7 @@ export default function CalendarHome(): ReactElement {
     const [fortuneViewedTags, setFortuneViewedTags] = useState<Record<string, [string, string, string]>>(() => getAllFortuneViewedTags())
     const fortunePaneRef = useRef<HTMLDivElement>(null)
     const specialDayCardRef = useRef<HTMLDivElement>(null)
+    const shakeNavigatedRef = useRef(false)
 
     const handleOpenFortune = useCallback(() => {
         if (fortunePaneRef.current) setFortuneSourceRect(fortunePaneRef.current.getBoundingClientRect())
@@ -189,6 +191,20 @@ export default function CalendarHome(): ReactElement {
         window.addEventListener('keydown', onKeyDown)
         return () => window.removeEventListener('keydown', onKeyDown)
     }, [isFortuneOverlayOpen, isSpecialDayOverlayOpen])
+
+    // Reason: 硬件摇杆触发 → 从首页导航至摇卦页面（ref 闸门防重复导航）
+    useEffect(() => {
+        shakeNavigatedRef.current = false
+        const onShake = (event: Event) => {
+            if (shakeNavigatedRef.current) return
+            shakeNavigatedRef.current = true
+            const detail = event instanceof CustomEvent ? event.detail : undefined
+            reportPiEventConsumerLog('consumer:home', 'shake.navigate', detail)
+            navigate(paths.home.shake)
+        }
+        window.addEventListener('pi:shake.trigger', onShake)
+        return () => window.removeEventListener('pi:shake.trigger', onShake)
+    }, [navigate])
 
     // 从详情页返回时刷新已查看状态
     useEffect(() => {
