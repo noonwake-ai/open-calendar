@@ -13,6 +13,13 @@ import './common/utils/array-extensions'
 const stripTrailingSlash = (p: string) => p.replace(/\/+$/, '') || ''
 const basePath = stripTrailingSlash(import.meta.env.BASE_URL)
 const isProjection = stripTrailingSlash(window.location.pathname) === `${basePath}${paths.projection}`
+const BRIDGE_OWNER_KEY = 'pi-bridge-owner'
+const BRIDGE_OWNER_TS_KEY = 'pi-bridge-owner-ts'
+const BRIDGE_HEARTBEAT_MS = 1000
+const BRIDGE_STALE_MS = 3000
+const bridgeWindowId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+let bridgeActive = false
+let bridgeHeartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 function onWakeTrigger(event: Event) {
     const detail = event instanceof CustomEvent ? event.detail : undefined
@@ -20,14 +27,90 @@ function onWakeTrigger(event: Event) {
     sendProjectionMessage({ type: 'trigger_scene', scene: 'wake' })
 }
 
+function nowMs(): number {
+    return Date.now()
+}
+
+function readBridgeOwner(): { owner: string | null, ts: number } {
+    const owner = window.localStorage.getItem(BRIDGE_OWNER_KEY)
+    const tsRaw = window.localStorage.getItem(BRIDGE_OWNER_TS_KEY)
+    const ts = tsRaw ? Number(tsRaw) : 0
+    return { owner, ts: Number.isFinite(ts) ? ts : 0 }
+}
+
+function writeBridgeOwner(owner: string): void {
+    const ts = String(nowMs())
+    window.localStorage.setItem(BRIDGE_OWNER_KEY, owner)
+    window.localStorage.setItem(BRIDGE_OWNER_TS_KEY, ts)
+}
+
+function releaseBridgeOwner(): void {
+    const { owner } = readBridgeOwner()
+    if (owner !== bridgeWindowId) return
+    window.localStorage.removeItem(BRIDGE_OWNER_KEY)
+    window.localStorage.removeItem(BRIDGE_OWNER_TS_KEY)
+}
+
+function syncBridgeLeadership(): void {
+    const { owner, ts } = readBridgeOwner()
+    const stale = !owner || nowMs() - ts > BRIDGE_STALE_MS
+    const shouldOwn = owner === bridgeWindowId || stale
+
+    if (shouldOwn) {
+        writeBridgeOwner(bridgeWindowId)
+        if (!bridgeActive) {
+            startPiEventBridge()
+            window.addEventListener('pi:wake.trigger', onWakeTrigger)
+            bridgeActive = true
+            reportPiEventConsumerLog('consumer:main', 'bridge.leader.acquired', { bridgeWindowId })
+        }
+        return
+    }
+
+    if (bridgeActive) {
+        stopPiEventBridge()
+        window.removeEventListener('pi:wake.trigger', onWakeTrigger)
+        bridgeActive = false
+        reportPiEventConsumerLog('consumer:main', 'bridge.leader.released', { bridgeWindowId, owner })
+    }
+}
+
+function onBridgeOwnerStorage(event: StorageEvent): void {
+    if (event.key === BRIDGE_OWNER_KEY || event.key === BRIDGE_OWNER_TS_KEY) {
+        syncBridgeLeadership()
+    }
+}
+
+function onBridgeBeforeUnload(): void {
+    if (bridgeHeartbeatTimer !== null) {
+        clearInterval(bridgeHeartbeatTimer)
+        bridgeHeartbeatTimer = null
+    }
+    releaseBridgeOwner()
+    if (bridgeActive) {
+        stopPiEventBridge()
+        window.removeEventListener('pi:wake.trigger', onWakeTrigger)
+        bridgeActive = false
+    }
+}
+
 if (!isProjection) {
-    startPiEventBridge()
-    window.addEventListener('pi:wake.trigger', onWakeTrigger)
+    syncBridgeLeadership()
+    bridgeHeartbeatTimer = setInterval(syncBridgeLeadership, BRIDGE_HEARTBEAT_MS)
+    window.addEventListener('storage', onBridgeOwnerStorage)
+    window.addEventListener('beforeunload', onBridgeBeforeUnload)
 }
 
 // Reason: HMR 时模块重新执行会累计监听器，dispose 清理上一轮的注册
 if (import.meta.hot) {
     import.meta.hot.dispose(() => {
+        if (bridgeHeartbeatTimer !== null) {
+            clearInterval(bridgeHeartbeatTimer)
+            bridgeHeartbeatTimer = null
+        }
+        window.removeEventListener('storage', onBridgeOwnerStorage)
+        window.removeEventListener('beforeunload', onBridgeBeforeUnload)
+        releaseBridgeOwner()
         stopPiEventBridge()
         window.removeEventListener('pi:wake.trigger', onWakeTrigger)
     })
