@@ -450,7 +450,7 @@ export default function ShakeHexagram(): ReactElement {
     // 步骤切换时播放固定 TTS 提示语
     useEffect(() => {
         const stepTexts: Partial<Record<Step, string>> = {
-            asking:      '一事一问，莫纠结，勿多疑',
+            asking:      '请按住语音键，说出你的疑问',
             ready:       '请拉动摇杆，获取卦象',
             interpreting:'卦象解读中，请静心等待',
         }
