@@ -238,7 +238,7 @@ export default function FortuneTypeDetail(): ReactElement {
 
             {/* ── 左侧：文字内容 ── */}
             <div style={leftPanelStyle}>
-                <div style={{ flex: 1, overflow: 'auto' }}>
+                <div className="hide-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
                     <h1 style={{ ...titleStyle, color: accentColor }}>{label}</h1>
                     <p style={{ ...ganzhiStyle, color: withAlpha(accentColor, 0.4) }}>{ganzhiDate}</p>
 

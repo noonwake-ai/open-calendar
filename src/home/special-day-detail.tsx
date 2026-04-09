@@ -446,7 +446,7 @@ export default function SpecialDayDetail(): ReactElement {
             <BackButton to={paths.home.index} />
 
             <div style={leftPanelStyle}>
-                <div style={{ flex: 1, overflow: 'auto' }}>
+                <div className="hide-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
                     <h1 style={{ ...titleStyle, color: accentColor }}>{title}</h1>
                     <p style={ganzhiStyle}>{displayName}</p>
 

@@ -5,6 +5,8 @@
 * {
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 body {
@@ -13,4 +15,11 @@ body {
     background: #000000 !important;
     overflow: hidden;
     touch-action: manipulation;
+}
+
+/* 隐藏滚动条但保留滚动能力 */
+.hide-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    &::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 }

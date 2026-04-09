@@ -778,7 +778,7 @@ export default function ShakeHexagram(): ReactElement {
             <div style={topSectionStyle}>
                 {/* Left */}
                 <div style={leftPanelStyle}>
-                    <div style={leftScrollStyle}>
+                    <div className="hide-scrollbar" style={leftScrollStyle}>
                         <div style={leftContentInnerStyle}>
                             <h1 style={titleStyle}>{title}</h1>
                             {subtitle && <p style={subtitleStyle}>{subtitle}</p>}
