@@ -16,6 +16,8 @@ import dify from '../utils/dify'
 import { getAppConfig } from '../utils/api'
 import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
+import ReadingLoading from '../components/reading-loading'
+import ResultVoiceBar from '../components/result-voice-bar'
 import printer from '../utils/printer'
 
 const FORTUNE_TYPE_COLORS: Record<string, string> = {
@@ -238,12 +240,12 @@ export default function FortuneTypeDetail(): ReactElement {
 
             {/* ── 左侧：文字内容 ── */}
             <div style={leftPanelStyle}>
-                <div className="hide-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
+                <div className="hide-scrollbar" style={scrollAreaStyle}>
                     <h1 style={{ ...titleStyle, color: accentColor }}>{label}</h1>
                     <p style={{ ...ganzhiStyle, color: withAlpha(accentColor, 0.4) }}>{ganzhiDate}</p>
 
                     {loading ? (
-                        <p style={{ color: colors.text.muted, fontSize: fontSize.md }}>正在生成运势报告...</p>
+                        <ReadingLoading text="正在生成运势报告..." />
                     ) : (
                         <>
                             <div style={tagsRowStyle}>
@@ -266,12 +268,15 @@ export default function FortuneTypeDetail(): ReactElement {
                 </div>
 
                 {/* 语音追问区域 */}
-                {!loading && reportData && doubaoReady && (
-                    <VoiceBar
-                        onRecordStart={interrupt}
-                        onAudioData={handleDoubaoAudio}
-                        onRecordStop={handleDoubaoRecordStop}
-                    />
+                {!loading && reportData && (
+                    <div style={floatingVoiceStyle}>
+                        <ResultVoiceBar
+                            enabled={doubaoReady}
+                            onRecordStart={interrupt}
+                            onAudioData={handleDoubaoAudio}
+                            onRecordStop={handleDoubaoRecordStop}
+                        />
+                    </div>
                 )}
             </div>
 
@@ -293,90 +298,30 @@ export default function FortuneTypeDetail(): ReactElement {
     )
 }
 
-/* ─── Voice Bar (空格录音追问) ─── */
-
-// Reason: 豆包模式 VoiceBar — 空格按下录音发送 PCM，松开结束
-function VoiceBar({ onRecordStart, onAudioData, onRecordStop }: {
-    onRecordStart?: () => void
-    onAudioData?: (pcm: ArrayBuffer) => void
-    onRecordStop?: () => void
-}) {
-    const [recording, setRecording] = useState(false)
-    const streamRef = useRef<MediaStream | null>(null)
-    const processorRef = useRef<ScriptProcessorNode | null>(null)
-    const ctxRef = useRef<AudioContext | null>(null)
-
-    useEffect(() => {
-        const onKeyDown = async (e: KeyboardEvent) => {
-            if (e.code !== 'Space' || e.repeat || recording) return
-            e.preventDefault()
-            onRecordStart?.()
-            setRecording(true)
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } })
-                streamRef.current = stream
-                const audioCtx = new AudioContext({ sampleRate: 16000 })
-                ctxRef.current = audioCtx
-                const source = audioCtx.createMediaStreamSource(stream)
-                const processor = audioCtx.createScriptProcessor(4096, 1, 1)
-                processorRef.current = processor
-                processor.onaudioprocess = (ev) => {
-                    const float32 = ev.inputBuffer.getChannelData(0)
-                    const int16 = new Int16Array(float32.length)
-                    for (let i = 0; i < float32.length; i++) {
-                        int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)))
-                    }
-                    onAudioData?.(int16.buffer)
-                }
-                source.connect(processor)
-                processor.connect(audioCtx.destination)
-            } catch (err) {
-                console.error('麦克风获取失败:', err)
-                setRecording(false)
-            }
-        }
-
-        const onKeyUp = (e: KeyboardEvent) => {
-            if (e.code !== 'Space') return
-            e.preventDefault()
-            setRecording(false)
-            processorRef.current?.disconnect()
-            streamRef.current?.getTracks().forEach(t => t.stop())
-            ctxRef.current?.close().catch(() => {})
-            processorRef.current = null
-            streamRef.current = null
-            ctxRef.current = null
-            onRecordStop?.()
-        }
-
-        window.addEventListener('keydown', onKeyDown)
-        window.addEventListener('keyup', onKeyUp)
-        return () => {
-            window.removeEventListener('keydown', onKeyDown)
-            window.removeEventListener('keyup', onKeyUp)
-            processorRef.current?.disconnect()
-            streamRef.current?.getTracks().forEach(t => t.stop())
-            ctxRef.current?.close().catch(() => {})
-        }
-    }, [recording, onRecordStart, onAudioData, onRecordStop])
-
-    return (
-        <div style={voiceBarStyle}>
-            <span style={voiceLabelStyle}>{recording ? '正在录音...' : '按住空格 语音追问'}</span>
-        </div>
-    )
-}
-
 /* ─── Styles ─── */
 
 const pageStyle: React.CSSProperties = {
     display: 'flex', flexDirection: 'row', height: '100vh',
-    padding: `${spacing.xl}px 80px`, gap: `${spacing.xl}px`,
+    padding: `0 80px`, gap: `${spacing.xl}px`,
     overflow: 'hidden', position: 'relative',
 }
 const leftPanelStyle: React.CSSProperties = {
-    flex: 1, display: 'flex', flexDirection: 'column', gap: `${spacing.md}px`, minWidth: 0,
+    flex: 1, display: 'flex', flexDirection: 'column', gap: `${spacing.md}px`, minWidth: 0, position: 'relative', height: '100%', minHeight: 0,
+}
+const scrollAreaStyle: React.CSSProperties = {
+    flex: 1,
+    overflow: 'auto',
+    minHeight: 0,
+    paddingTop: `${spacing.xl}px`,
+    paddingBottom: '176px',
+}
+const floatingVoiceStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: '24px',
+    zIndex: 1,
 }
 const rightPanelStyle: React.CSSProperties = {
     width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column',
@@ -405,11 +350,4 @@ const fortuneIndexStyle: React.CSSProperties = {
 }
 const contentStyle: React.CSSProperties = {
     fontSize: fontSize.md, color: colors.text.primary, lineHeight: 1.8, margin: 0,
-}
-const voiceBarStyle: React.CSSProperties = {
-    padding: `${spacing.sm}px`, background: 'rgba(116,65,255,0.06)',
-    border: `1px solid ${colors.brand.border}`, borderRadius: radius.lg, textAlign: 'center',
-}
-const voiceLabelStyle: React.CSSProperties = {
-    fontSize: fontSize.xs, color: colors.text.muted, letterSpacing: '1px',
 }

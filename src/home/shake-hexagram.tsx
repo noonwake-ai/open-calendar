@@ -14,6 +14,8 @@ import dify from '../utils/dify'
 import { getAppConfig } from '../utils/api'
 import BackButton from '../components/back-button'
 import PrintSignCard from '../components/print-sign-card'
+import ReadingLoading from '../components/reading-loading'
+import ResultVoiceBar from '../components/result-voice-bar'
 import { publicAssetUrl } from '../utils/public-asset-url'
 import printer from '../utils/printer'
 import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
@@ -467,14 +469,21 @@ function AudioSpectrum({ canRecord, hasRecordedOnce, onRecordStart, onRecordEnd,
     return (
         <div style={spectrumWrapStyle}>
             <p style={spectrumLabelStyle}>
-                {isRecording ? '正在收音...' : hasRecordedOnce ? '按住语音键可继续补充' : '按住语音键说话'}
+                {isRecording ? '正在收音...' : hasRecordedOnce ? '按住语音键可继续对话' : '按住语音键说话'}
             </p>
             <div style={spectrumBarsStyle}>
                 {Array.from({ length: SPECTRUM_BARS }, (_, i) => (
                     <div
                         key={i}
                         ref={el => { barsRef.current[i] = el }}
-                        style={{ width: '4px', height: '4px', background: barBg, borderRadius: '2px', flexShrink: 0, transition: 'background 0.2s' }}
+                        style={{
+                            width: '4px',
+                            height: '4px',
+                            background: barBg,
+                            borderRadius: '999px',
+                            flexShrink: 0,
+                            transition: 'background 0.2s',
+                        }}
                     />
                 ))}
             </div>
@@ -866,7 +875,7 @@ export default function ShakeHexagram(): ReactElement {
         content  = streamingReading
     }
 
-    const showSpectrum = step === 'asking' || step === 'ready' || step === 'result'
+    const showSpectrum = step === 'asking' || step === 'ready'
 
     return (
         <div style={pageStyle}>
@@ -876,9 +885,15 @@ export default function ShakeHexagram(): ReactElement {
                 {/* Left */}
                 <div style={leftPanelStyle}>
                     <div className="hide-scrollbar" style={leftScrollStyle}>
-                        <div style={leftContentInnerStyle}>
+                        <div
+                            style={{
+                                ...leftContentInnerStyle,
+                                ...(step === 'result' ? leftContentTopStyle : leftContentCenteredStyle),
+                            }}
+                        >
                             <h1 style={titleStyle}>{title}</h1>
                             {subtitle && <p style={subtitleStyle}>{subtitle}</p>}
+                            {step === 'interpreting' && <ReadingLoading />}
                             {content  && <p style={contentStyle}>{content}</p>}
                             {step === 'result' && reportData && reportData.blessings.length > 0 && (
                                 <div style={blessingsWrapStyle}>
@@ -897,6 +912,16 @@ export default function ShakeHexagram(): ReactElement {
 
                     {step === 'ready' && (
                         <button onClick={startSpinning} style={leverAbsStyle}>⟳ 摇动杠杆</button>
+                    )}
+
+                    {step === 'result' && (
+                        <div style={leftFloatingVoiceStyle}>
+                            <ResultVoiceBar
+                                onRecordStart={interrupt}
+                                onAudioData={doubaoReady ? handleDoubaoAudio : undefined}
+                                onRecordStop={doubaoReady ? handleDoubaoRecordStop : undefined}
+                            />
+                        </div>
                     )}
                 </div>
 
@@ -997,6 +1022,14 @@ const leftPanelStyle: React.CSSProperties = {
     overflow: 'hidden',
 }
 
+const leftFloatingVoiceStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '28px',
+    pointerEvents: 'auto',
+}
+
 const leftScrollStyle: React.CSSProperties = {
     flex: 1,
     overflowY: 'auto',
@@ -1012,6 +1045,14 @@ const leftContentInnerStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     gap: `${spacing.md}px`,
+    margin: 0,
+}
+
+const leftContentTopStyle: React.CSSProperties = {
+    marginTop: 0,
+}
+
+const leftContentCenteredStyle: React.CSSProperties = {
     margin: 'auto 0',
 }
 
@@ -1136,6 +1177,7 @@ const spectrumLabelStyle: React.CSSProperties = {
     textAlign: 'center',
     flexShrink: 0,
 }
+
 
 const spectrumBarsStyle: React.CSSProperties = {
     height: '48px',
