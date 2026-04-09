@@ -1,7 +1,7 @@
 import { getAppConfig } from '../config/runtime'
 
 export type ProjectionChannelMsg =
-    | { type: 'trigger_scene'; scene: 'interpret' | 'casting' | 'idle' | 'wake'; tts_content?: string }
+    | { type: 'trigger_scene'; scene: 'sleep' | 'interpret' | 'casting' | 'idle' | 'wake'; tts_content?: string }
 
 type ProjectionEventEntry = {
     seq: number

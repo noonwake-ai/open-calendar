@@ -8,6 +8,8 @@ import type { Bazi } from '../domain/types'
 import { colors, fontSize, fontWeight, radius, spacing, btn } from '../styles/tokens'
 import BackButton from '../components/back-button'
 import { clearAllBlessings } from '../utils/local-db'
+import { resetToSleep } from './index'
+import { sendProjectionMessage } from '../utils/projection-channel'
 
 // UserGender: female=0, male=1, unknown=2
 function formatGender(gender: number | null | undefined): string {
@@ -55,6 +57,12 @@ export default function Settings(): ReactElement {
         }
     }
 
+    const handleResetToSleep = () => {
+        resetToSleep()
+        sendProjectionMessage({ type: 'trigger_scene', scene: 'sleep' })
+        navigate(paths.home.index)
+    }
+
     const rows: Array<{ label: string; value: string }> = [
         { label: '姓名', value: bazi?.bazi_name ?? '—' },
         { label: '性别', value: formatGender(bazi?.bazi_gender) },
@@ -90,6 +98,14 @@ export default function Settings(): ReactElement {
                     >
                         <span style={rowLabelStyle}>清理祈福数据</span>
                         <span style={{ fontSize: fontSize.sm, color: colors.text.muted }}>清除本地祈福待办</span>
+                    </div>
+                    <div style={dividerStyle} />
+                    <div
+                        style={{ ...rowStyle, cursor: 'pointer' }}
+                        onClick={handleResetToSleep}
+                    >
+                        <span style={rowLabelStyle}>返回未唤醒状态</span>
+                        <span style={{ fontSize: fontSize.sm, color: colors.text.muted }}>重置为屏保页面</span>
                     </div>
                 </div>
 

@@ -4,7 +4,7 @@ import { paths, fortuneTypePath } from '../router/urls'
 import { callApi } from '../utils/api'
 import { apis } from '../utils/api'
 import { getDeviceToken } from '../utils/device'
-import { startBaziPolling, getActiveBazi } from '../utils/bazi-store'
+import { startBaziPolling, getActiveBazi, onBaziChange } from '../utils/bazi-store'
 import baziHelpers from '../common/helpers/bazi-helpers'
 import { fetchUserInfo, getUser } from '../utils/user-store'
 import { Blessing, formatBlessingSummary, listAllBlessings } from '../utils/local-db'
@@ -15,10 +15,61 @@ import { buildTodoCategoryMap, TODO_CATEGORY_COLORS } from './todo-meta'
 import { getAllFortuneViewedTags, saveFortuneViewedTags } from '../utils/fortune-viewed-store'
 import { publicAssetUrl } from '../utils/public-asset-url'
 import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
+import { sendProjectionMessage } from '../utils/projection-channel' 
 
 type HomeData = NonNullable<typeof apis.pi.home.today['_resp']>
 
+// TODO: 替换为实际的屏保视频地址
+const SCREENSAVER_VIDEO_URL = publicAssetUrl('pingbao.mp4')
+
 const WEEKDAYS_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+const SOLAR_BANNER_MAP: Record<string, string> = {
+    立春: publicAssetUrl('solar-card/lichun.png'), 雨水: publicAssetUrl('solar-card/yushui.png'),
+    惊蛰: publicAssetUrl('solar-card/jingzhe.png'), 春分: publicAssetUrl('solar-card/chunfen.png'),
+    清明: publicAssetUrl('solar-card/qingming.png'), 谷雨: publicAssetUrl('solar-card/guyu.png'),
+    立夏: publicAssetUrl('solar-card/lixia.png'), 小满: publicAssetUrl('solar-card/xiaoman.png'),
+    芒种: publicAssetUrl('solar-card/mangzhong.png'), 夏至: publicAssetUrl('solar-card/xiazhi.png'),
+    小暑: publicAssetUrl('solar-card/xiaoshu.png'), 大暑: publicAssetUrl('solar-card/dashu.png'),
+    立秋: publicAssetUrl('solar-card/liqiu.png'), 处暑: publicAssetUrl('solar-card/chushu.png'),
+    白露: publicAssetUrl('solar-card/bailu.png'), 秋分: publicAssetUrl('solar-card/qiufen.png'),
+    寒露: publicAssetUrl('solar-card/hanlu.png'), 霜降: publicAssetUrl('solar-card/shuangjiang.png'),
+    立冬: publicAssetUrl('solar-card/lidong.png'), 小雪: publicAssetUrl('solar-card/xiaoxue.png'),
+    大雪: publicAssetUrl('solar-card/daxue.png'), 冬至: publicAssetUrl('solar-card/dongzhi.png'),
+    小寒: publicAssetUrl('solar-card/xiaohan.png'), 大寒: publicAssetUrl('solar-card/dahan.png'),
+}
+
+const TEN_GOD_BRANCH_IMG_MAP: Record<string, string> = {
+    食神制杀: publicAssetUrl('ten-god-branch/shishenzhisha.png'),
+    食伤生财: publicAssetUrl('ten-god-branch/shishangshengcai.png'),
+    伤官见官: publicAssetUrl('ten-god-branch/shangguanjianguan.png'),
+    伤官佩印: publicAssetUrl('ten-god-branch/shangguanpeiyin.png'),
+    伤官配印: publicAssetUrl('ten-god-branch/shangguanpeiyin.png'),
+    财生官杀: publicAssetUrl('ten-god-branch/caishengguansha.png'),
+    劫财争财: publicAssetUrl('ten-god-branch/jiecaizhengcai.png'),
+    官印相生: publicAssetUrl('ten-god-branch/guanyinxiangsheng.png'),
+    官杀混杂: publicAssetUrl('ten-god-branch/guanshahunza.png'),
+    偏印夺食: publicAssetUrl('ten-god-branch/pianyinduoshi.png'),
+}
+
+const GAN_RELATION_IMG_MAP: Record<string, string> = {
+    甲己合: publicAssetUrl('gan-relation/jiaji.png'),
+    乙庚合: publicAssetUrl('gan-relation/yigeng.png'),
+    丙辛合: publicAssetUrl('gan-relation/bingxin.png'),
+    丁壬合: publicAssetUrl('gan-relation/dingren.png'),
+    戊癸合: publicAssetUrl('gan-relation/wugui.png'),
+    甲庚冲: publicAssetUrl('gan-relation/jiageng.png'),
+    乙辛冲: publicAssetUrl('gan-relation/yixin.png'),
+    丙壬冲: publicAssetUrl('gan-relation/bingren.png'),
+    丁癸冲: publicAssetUrl('gan-relation/dinggui.png'),
+}
+
+function getSpecialDayCardImg(sd: { category?: string; data: any }): string | null {
+    if (sd.category === 'solar' && sd.data.term) return SOLAR_BANNER_MAP[sd.data.term] ?? null
+    if (sd.category === 'tenGodBranch' && sd.data.relation) return TEN_GOD_BRANCH_IMG_MAP[sd.data.relation] ?? null
+    if (sd.category === 'ganRelation' && sd.data.relation) return GAN_RELATION_IMG_MAP[sd.data.relation] ?? null
+    return null
+}
 
 const FORTUNE_ITEMS = [
     { key: 'love',   icon: '♥', cnTitle: '桃花', color: TODO_CATEGORY_COLORS.love,   image: publicAssetUrl('fortune-love.png') },
@@ -88,6 +139,17 @@ function formatMonthDay(dateKey: string): string {
 
 const TODO_CATEGORY_MAP = buildTodoCategoryMap(INITIAL_TODOS)
 
+// 模块级缓存：跨导航保持已唤醒状态；天干地支日期变化时重置
+let _cachedAwakePhase: 'sleep' | 'awake' = 'sleep'
+let _cachedAwakeDate = ''  // 格式：new Date().toDateString()
+let _justWoke = false      // 仅首次唤醒动画播放，导航返回不重放
+
+/** 供外部（如设置页）调用，将设备重置回未唤醒状态 */
+export function resetToSleep(): void {
+    _cachedAwakePhase = 'sleep'
+    _cachedAwakeDate = ''
+}
+
 export default function CalendarHome(): ReactElement {
     const navigate = useNavigate()
     const [data, setData] = useState<HomeData | null>(null)
@@ -102,6 +164,43 @@ export default function CalendarHome(): ReactElement {
     const fortunePaneRef = useRef<HTMLDivElement>(null)
     const specialDayCardRef = useRef<HTMLDivElement>(null)
     const shakeNavigatedRef = useRef(false)
+    // 'sleep' = 屏保中 | 'waking' = 正在唤醒动画 | 'awake' = 已唤醒
+    const [awakePhase, setAwakePhase] = useState<'sleep' | 'waking' | 'awake'>(() => {
+        if (_cachedAwakePhase === 'awake' && _cachedAwakeDate === new Date().toDateString()) return 'awake'
+        _cachedAwakePhase = 'sleep'
+        return 'sleep'
+    })
+    // Reason: 用于检测八字切换（非首次加载），只有 bazi_id 实际变化才回到未唤醒
+    const prevBaziIdRef = useRef<string | null | undefined>(undefined)
+
+    // 进入首页时右屏黑屏（若未唤醒；已唤醒时不重置）
+    useEffect(() => {
+        if (_cachedAwakePhase !== 'awake') {
+            sendProjectionMessage({ type: 'trigger_scene', scene: 'sleep' })
+        }
+    }, [])
+
+    // 物理唤醒按键 → 进入唤醒动画阶段（投影消息由 main.tsx 统一发送）
+    useEffect(() => {
+        const onWake = () => setAwakePhase(prev => prev === 'sleep' ? 'waking' : prev)
+        window.addEventListener('pi:wake.trigger', onWake)
+        return () => window.removeEventListener('pi:wake.trigger', onWake)
+    }, [])
+
+    // 八字切换时回到未唤醒状态
+    useEffect(() => {
+        return onBaziChange((bazi) => {
+            const newId = bazi?.bazi_id ?? null
+            const prevId = prevBaziIdRef.current
+            prevBaziIdRef.current = newId
+            // undefined = 首次加载，不触发重置；实际变化才重置
+            if (prevId !== undefined && prevId !== newId) {
+                _cachedAwakePhase = 'sleep'
+                setAwakePhase('sleep')
+                sendProjectionMessage({ type: 'trigger_scene', scene: 'sleep' })
+            }
+        })
+    }, [])
 
     const handleOpenFortune = useCallback(() => {
         if (fortunePaneRef.current) setFortuneSourceRect(fortunePaneRef.current.getBoundingClientRect())
@@ -213,10 +312,59 @@ export default function CalendarHome(): ReactElement {
         return () => window.removeEventListener('focus', onFocus)
     }, [])
 
-    if (loading) {
+    // 唤醒入场动画仅首次唤醒播放，导航返回不重放
+    useEffect(() => {
+        _justWoke = false
+    }, [])
+
+    if (awakePhase === 'sleep') {
         return (
-            <div style={loadingStyle}>
-                <p style={{ color: colors.text.muted, fontSize: fontSize.md }}>加载中...</p>
+            <div style={sleepScreenStyle}>
+                <video
+                    src={SCREENSAVER_VIDEO_URL}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={screensaverVideoStyle}
+                />
+                <button
+                    style={wakeButtonStyle}
+                    onClick={() => window.dispatchEvent(new CustomEvent('pi:wake.trigger'))}
+                >
+                    唤醒
+                </button>
+            </div>
+        )
+    }
+
+    if (awakePhase === 'waking') {
+        return (
+            <div
+                style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 100,
+                    overflow: 'hidden',
+                    animation: 'sleep-shrink 1500ms cubic-bezier(0.4, 0, 0.2, 1) both',
+                }}
+                onAnimationEnd={(e: React.AnimationEvent) => {
+                    if (e.animationName === 'sleep-shrink') {
+                        _justWoke = true
+                        _cachedAwakePhase = 'awake'
+                        _cachedAwakeDate = new Date().toDateString()
+                        setAwakePhase('awake')
+                    }
+                }}
+            >
+                <video
+                    src={SCREENSAVER_VIDEO_URL}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={screensaverVideoStyle}
+                />
             </div>
         )
     }
@@ -228,10 +376,20 @@ export default function CalendarHome(): ReactElement {
     const nearestBlessingDate = [...blessings]
         .sort((a, b) => a.date.localeCompare(b.date))[0]?.date ?? null
     const blessingDates = new Set(blessings.map(b => b.date))
+    // 仅首次唤醒播放入场动画
+    const slideIn = (delay: string) =>
+        _justWoke ? `home-slide-in 700ms ${delay} cubic-bezier(0.22,1,0.36,1) both` : 'none'
+
     return (
+        <>
+        {loading ? (
+            <div style={loadingStyle}>
+                <p style={{ color: colors.text.muted, fontSize: fontSize.md }}>加载中...</p>
+            </div>
+        ) : (
         <div style={pageStyle}>
             {/* ── 区域 A：顶部栏（时钟 + 干支） ── */}
-            <header style={headerStyle}>
+            <header style={{ ...headerStyle, animation: slideIn('0ms') }}>
                 <div style={headerMainStyle}>
                     <div style={clockStyle}>{formatTime(now)}</div>
                     {ganzhiLines.length > 0 && (
@@ -259,7 +417,7 @@ export default function CalendarHome(): ReactElement {
             </header>
 
             {/* ── 区域 B：周历条 ── */}
-            <div style={weekCardStyle} onClick={() => navigate(paths.home.todo)}>
+            <div style={{ ...weekCardStyle, animation: slideIn('150ms') }} onClick={() => navigate(paths.home.todo)}>
                 <div style={weekInlineListStyle}>
                     {weekDays.map((day, i) => {
                         const isToday = isSameDay(day, now)
@@ -292,21 +450,21 @@ export default function CalendarHome(): ReactElement {
             </div>
 
             {/* ── 区域 C：左信息区 + 右运势堆叠 ── */}
-            <div style={dashboardStyle}>
+            <div style={{ ...dashboardStyle, animation: slideIn('300ms') }}>
                 {/* 祈福待办 */}
-                <div style={{ ...infoCardStyle, background: withAlpha(colors.fortune.blessing, 0.07), cursor: 'pointer' }} onClick={() => navigate(paths.home.todo, { state: { selectedDate: nearestBlessingDate } })}>
+                <div style={{ ...infoCardStyle, background: colors.fortune.blessing, cursor: 'pointer' }} onClick={() => navigate(paths.home.todo, { state: { selectedDate: nearestBlessingDate } })}>
                     <div style={todoCardHeaderRowStyle}>
                         <div style={bottomCardHeaderStyle}>
-                            <span style={{ ...bottomCardTitleStyle, color: colors.fortune.blessing }}>祈福事项</span>
-                            <span style={{ ...bottomCardIconStyle, color: colors.fortune.blessing }}>★</span>
+                            <span style={{ ...bottomCardTitleStyle, color: colors.text.onBright }}>祈福事项</span>
+                            <span style={{ ...bottomCardIconStyle, color: withAlpha(colors.text.onBright, 0.70) }}>★</span>
                         </div>
                         {nearestBlessingDate && (
-                            <span style={todoDateInlineStyle}>{formatMonthDay(nearestBlessingDate)}</span>
+                            <span style={{ ...todoDateInlineStyle, color: withAlpha(colors.text.onBright, 0.50) }}>{formatMonthDay(nearestBlessingDate)}</span>
                         )}
                     </div>
                     <div style={todoListStyle}>
                         {blessings.length === 0 && (
-                            <span style={todoEmptyStyle}>暂无祈福心愿，点击进入添加</span>
+                            <span style={{ ...todoEmptyStyle, color: withAlpha(colors.text.onBright, 0.50) }}>暂无祈福心愿，点击进入添加</span>
                         )}
                         {blessings.filter(b => b.date === nearestBlessingDate).map((b, i) => (
                             <div key={b.id ?? i} style={blessingTodoRowStyle}>
@@ -317,36 +475,37 @@ export default function CalendarHome(): ReactElement {
                 </div>
 
                 {/* 特殊日 */}
-                <div style={{ ...infoCardStyle, cursor: firstSpecialDay ? 'pointer' : 'default' }}
+                <div style={{ ...infoCardStyle, background: colors.brand.light, gap: 4, cursor: firstSpecialDay ? 'pointer' : 'default' }}
                     ref={specialDayCardRef}
                     onClick={() => firstSpecialDay && handleOpenSpecialDay()}
                 >
                     <div style={bottomCardHeaderStyle}>
-                        <span style={bottomCardTitleStyle}>特殊日</span>
-                        <span style={bottomCardIconStyle}>◎</span>
+                        <span style={{ ...bottomCardTitleStyle, color: colors.text.onBright }}>特殊日</span>
+                        <span style={{ ...bottomCardIconStyle, color: withAlpha(colors.text.onBright, 0.70) }}>◎</span>
                     </div>
                     {firstSpecialDay ? (
-                        <>
-                            <div style={specialDayNameStyle}>
-                                {firstSpecialDay.data.dayName ?? firstSpecialDay.data.term ?? firstSpecialDay.data.relation ?? '今日特殊日'}
+                        <div style={specialDayItemsWrapperStyle}>
+                            <div style={specialDayItemStyle}>
+                                <div style={specialDayNameStyle}>
+                                    {firstSpecialDay.data.dayName ?? firstSpecialDay.data.term ?? firstSpecialDay.data.relation ?? '今日特殊日'}
+                                </div>
+                                {firstSpecialDay.data.emotion && (
+                                    <div style={specialDayEmotionTagStyle}>{firstSpecialDay.data.emotion}</div>
+                                )}
                             </div>
-                            {firstSpecialDay.data.emotion && (
-                                <div style={specialDayEmotionTagStyle}>{firstSpecialDay.data.emotion}</div>
-                            )}
                             {specialDays[1] && (
-                                <>
-                                    <div style={specialDayDividerStyle} />
+                                <div style={specialDayItemSecondStyle}>
                                     <div style={specialDayNameStyle}>
                                         {specialDays[1].data.dayName ?? specialDays[1].data.term ?? specialDays[1].data.relation ?? '今日特殊日'}
                                     </div>
                                     {specialDays[1].data.emotion && (
                                         <div style={specialDayEmotionTagStyle}>{specialDays[1].data.emotion}</div>
                                     )}
-                                </>
+                                </div>
                             )}
-                        </>
+                        </div>
                     ) : (
-                        <div style={{ ...specialDayNameStyle, color: whiteAlpha(0.45) }}>平稳无冲</div>
+                        <div style={{ ...specialDayNameStyle, color: withAlpha(colors.text.onBright, 0.45) }}>平稳无冲</div>
                     )}
                 </div>
 
@@ -402,7 +561,7 @@ export default function CalendarHome(): ReactElement {
                                 style={{
                                     ...fortuneDeckCardStyle,
                                     ...getFortuneOverlayCardStyle(index, isFortuneOverlayOpen, item.color, fortuneSourceRect),
-                                    background: `linear-gradient(180deg, ${withAlpha(item.color, 0.15)} 0%, ${withAlpha(item.color, 0.07)} 100%)`,
+                                    background: withAlpha(item.color, 0.22),
                                 }}
                                 onClick={e => {
                                     e.stopPropagation()
@@ -434,24 +593,6 @@ export default function CalendarHome(): ReactElement {
                                 ) : (
                                     <div style={{ ...fortuneOverlayActionStyle, position: 'relative', zIndex: 1 }}>查看详情</div>
                                 )}
-                                {!viewedTags && (
-                                    <div
-                                        style={fortuneDevSimStyle}
-                                        onClick={e => {
-                                            e.stopPropagation()
-                                            const mockTags: Record<string, [string, string, string]> = {
-                                                love:   ['桃花旺盛', '真心相遇', '情感升温'],
-                                                career: ['贵人相助', '稳中求进', '机遇涌现'],
-                                                wealth: ['财源广进', '偏财旺盛', '投资有利'],
-                                                study:  ['思维敏捷', '灵感爆发', '学有所成'],
-                                            }
-                                            saveFortuneViewedTags(item.key, mockTags[item.key])
-                                            setFortuneViewedTags(getAllFortuneViewedTags())
-                                        }}
-                                    >
-                                        模拟已查看
-                                    </div>
-                                )}
                             </div>
                         )
                     })}
@@ -469,22 +610,33 @@ export default function CalendarHome(): ReactElement {
                 <div style={fortuneOverlayStageStyle}>
                     {specialDays.map((sd, index) => {
                         const title = sd.data.dayName ?? sd.data.term ?? sd.data.relation ?? '特殊日'
+                        const subtitle = sd.data.dayName ? (sd.data.relation ?? sd.data.term ?? null) : null
+                        const cardImg = getSpecialDayCardImg(sd)
+                        const storeKey = `sd_${title}`
+                        const viewedTags = fortuneViewedTags[storeKey] ?? null
                         return (
                             <div
                                 key={index}
                                 style={{
                                     ...fortuneDeckCardStyle,
                                     ...getSpecialDayOverlayCardStyle(index, specialDays.length, isSpecialDayOverlayOpen, specialDaySourceRect),
+                                    background: withAlpha(colors.brand.light, 0.22),
                                 }}
                                 onClick={e => {
                                     e.stopPropagation()
+                                    // 进入详情前保存已查看标签
+                                    if (sd.data.keywords) {
+                                        const rawTags = (sd.data.keywords as string).split(/[,，、]/).map((t: string) => t.trim()).filter(Boolean)
+                                        const tags: [string, string, string] = [rawTags[0] ?? '', rawTags[1] ?? '', rawTags[2] ?? '']
+                                        saveFortuneViewedTags(storeKey, tags)
+                                        setFortuneViewedTags(getAllFortuneViewedTags())
+                                    }
                                     const activeBazi = getActiveBazi()
                                     const userGan = activeBazi ? baziHelpers.getEightCharByTime(activeBazi.bazi_real_sun_time).getDay().getHeavenStem().getName() : undefined
                                     const todayEc = baziHelpers.getEightCharByTime(Date.now())
                                     const todayGan = todayEc.getDay().getHeavenStem().getName()
                                     const todayZhi = todayEc.getDay().getEarthBranch().getName()
                                     const ganShiShen = userGan ? baziHelpers.getDayGanShiShen(userGan, todayGan) : undefined
-                                    // zhiShiShen: 取日地支藏干主气对日主的十神
                                     let zhiShiShen: string | undefined
                                     if (userGan) {
                                         try {
@@ -499,9 +651,28 @@ export default function CalendarHome(): ReactElement {
                                     navigate(paths.home.specialDay, { state: { title, emotion: sd.data.emotion, keywords: sd.data.keywords, interpretation: sd.data.interpretation, category: sd.category, relation: (sd.data as any).relation, term: (sd.data as any).term, modernName: (sd.data as any).modernName, dayGanzhi: data?.date.ganzhi, todayGan, todayZhi, userGan, ganShiShen, zhiShiShen } })
                                 }}
                             >
-                                <span style={{ ...cnTitleStyle, color: colors.fortune.special }}>{title}</span>
-                                {sd.data.emotion && (
-                                    <div style={specialDayEmotionTagStyle}>{sd.data.emotion}</div>
+                                {/* 背景图（未查看时显示） */}
+                                {!viewedTags && cardImg && (
+                                    <img src={cardImg} style={fortuneCardBgImgStyle} alt="" />
+                                )}
+                                <div style={{ ...fortuneCardTopStyle, position: 'relative', zIndex: 1 }}>
+                                    <span style={{ ...cnTitleStyle, color: colors.fortune.special, fontSize: fontSize.lg }}>{title}</span>
+                                </div>
+                                {viewedTags ? (
+                                    <div style={{ ...fortuneTagsRowStyle, position: 'relative', zIndex: 1 }}>
+                                        {viewedTags.map((tag, i) => (
+                                            <span key={i} style={{ ...fortuneTagStyle, borderColor: `${colors.fortune.special}44`, color: colors.fortune.special }}>
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
+                                        {subtitle && (
+                                            <div style={specialDayOverlaySubtitleStyle}>{subtitle}</div>
+                                        )}
+                                        <div style={fortuneOverlayActionStyle}>查看详情</div>
+                                    </div>
                                 )}
                             </div>
                         )
@@ -514,10 +685,42 @@ export default function CalendarHome(): ReactElement {
                 </div>
             </div>
         </div>
+        )}
+        </>
     )
 }
 
 /* ─── Styles ─── */
+
+const sleepScreenStyle: React.CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    background: '#000',
+    zIndex: 0,
+    overflow: 'hidden',
+}
+
+const screensaverVideoStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+}
+
+const wakeButtonStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: '48px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '12px 40px',
+    background: 'rgba(255,255,255,0.12)',
+    border: '1px solid rgba(255,255,255,0.25)',
+    borderRadius: '999px',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '16px',
+    letterSpacing: '4px',
+    cursor: 'pointer',
+    backdropFilter: 'blur(8px)',
+}
 
 const pageStyle: React.CSSProperties = {
     display: 'flex',
@@ -568,7 +771,7 @@ const ganzhiBlockStyle: React.CSSProperties = {
 }
 
 const ganzhiLineStyle: React.CSSProperties = {
-    fontSize: fontSize.base,
+    fontSize: fontSize.lg,
     color: whiteAlpha(0.3),
     letterSpacing: '0.5px',
     lineHeight: 1.2,
@@ -612,7 +815,7 @@ const settingsIconBtnStyle: React.CSSProperties = {
 const weekCardStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    background: withAlpha(colors.brand.light, 0.13),
+    background: withAlpha(colors.brand.light, 0.28),
     border: 'none',
     borderRadius: radius.xl,
     padding: `${spacing.xs}px ${spacing.lg}px`,
@@ -631,20 +834,20 @@ const weekInlineItemStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '8px',
+    gap: '4px',
     minWidth: 0,
-    padding: `${spacing.xs}px 0`,
+    padding: `4px 0`,
     borderRadius: radius.lg,
 }
 
 const weekInlineItemActiveStyle: React.CSSProperties = {
-    background: 'transparent',
-    border: `1px solid ${withAlpha(colors.brand.light, 0.8)}`,
+    background: withAlpha(colors.brand.light, 0.15),
+    border: `1px solid ${colors.brand.light}`,
     borderRadius: radius.md,
 }
 
 const weekInlineWeekdayStyle: React.CSSProperties = {
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     color: withAlpha(colors.text.primary, 0.6),
     letterSpacing: '0.5px',
 }
@@ -655,7 +858,7 @@ const weekInlineWeekdayActiveStyle: React.CSSProperties = {
 }
 
 const weekInlineDateStyle: React.CSSProperties = {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.xl,
     color: colors.text.primary,
     fontWeight: fontWeight.semibold,
 }
@@ -666,13 +869,13 @@ const weekInlineDateActiveStyle: React.CSSProperties = {
 }
 
 const weekInlineLunarStyle: React.CSSProperties = {
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     color: withAlpha(colors.text.primary, 0.3),
     lineHeight: 1.1,
 }
 
 const weekInlineLunarActiveStyle: React.CSSProperties = {
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     color: withAlpha(colors.brand.light, 0.6),
     lineHeight: 1.1,
 }
@@ -699,8 +902,8 @@ const dashboardStyle: React.CSSProperties = {
 }
 
 const infoCardStyle: React.CSSProperties = {
-    background: colors.bg.overlay,
-    border: 'none',
+    background: brandAlpha(0.14),
+    border: `1px solid ${colors.brand.border}`,
     borderRadius: radius.xl,
     padding: `${spacing.lg}px`,
     display: 'flex',
@@ -716,7 +919,7 @@ const fortunePaneStyle: React.CSSProperties = {
     position: 'relative',
     minHeight: 0,
     minWidth: 0,
-    background: `linear-gradient(180deg, ${brandAlpha(0.06)} 0%, ${brandAlpha(0.12)} 100%)`,
+    background: '#2a1e08',
     border: 'none',
     borderRadius: radius.xl,
     overflow: 'hidden',
@@ -732,7 +935,7 @@ const fortunePaneHeaderStyle: React.CSSProperties = {
 }
 
 const fortunePaneTitleStyle: React.CSSProperties = {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     color: colors.brand.light,
     letterSpacing: '1px',
     fontWeight: fontWeight.semibold,
@@ -821,19 +1024,6 @@ const fortuneTagStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
 }
 
-const fortuneDevSimStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: '12px',
-    right: '12px',
-    fontSize: '11px',
-    color: withAlpha('#ffffff', 0.35),
-    background: withAlpha('#ffffff', 0.07),
-    border: `1px solid ${withAlpha('#ffffff', 0.15)}`,
-    borderRadius: radius.sm,
-    padding: '4px 8px',
-    cursor: 'pointer',
-}
-
 const fortuneOverlayActionStyle: React.CSSProperties = {
     alignSelf: 'flex-start',
     fontSize: fontSize.xs,
@@ -889,43 +1079,60 @@ const bottomCardHeaderStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    marginBottom: '2px',
 }
 
 const bottomCardTitleStyle: React.CSSProperties = {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     color: colors.brand.light,
     letterSpacing: '1px',
     fontWeight: fontWeight.semibold,
 }
 
 const bottomCardIconStyle: React.CSSProperties = {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     color: colors.brand.light,
     lineHeight: 1,
 }
 
-// 特殊日分割线
-const specialDayDividerStyle: React.CSSProperties = {
-    width: '100%',
-    height: '1px',
-    background: withAlpha(colors.fortune.special, 0.15),
-    margin: `${spacing.xs / 2}px 0`,
+// 特殊日单个日子的 box（name + tag 包裹）
+const specialDayItemsWrapperStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+}
+
+const specialDayItemStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: `10px`,
+    padding: `12px 0 16px 0`,
+}
+
+// 特殊日第二个日子（加 border-top 作为分隔线）
+const specialDayItemSecondStyle: React.CSSProperties = {
+    ...specialDayItemStyle,
+    borderTop: `1px solid ${withAlpha(colors.text.onBright, 0.15)}`,
 }
 
 // 特殊日名称（大字标题）
 const specialDayNameStyle: React.CSSProperties = {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
-    color: colors.fortune.special,
+    color: colors.text.onBright,
     lineHeight: 1.3,
+}
+
+// 特殊日浮层卡片副标题（技术名称）
+const specialDayOverlaySubtitleStyle: React.CSSProperties = {
+    fontSize: fontSize.sm,
+    color: withAlpha(colors.fortune.special, 0.7),
+    letterSpacing: '0.5px',
 }
 
 // 特殊日情绪标签（标题下方）
 const specialDayEmotionTagStyle: React.CSSProperties = {
     fontSize: fontSize.xs,
-    color: colors.text.muted,
-    background: colors.bg.overlayActive,
+    color: withAlpha(colors.text.onBright, 0.55),
+    background: withAlpha(colors.text.onBright, 0.10),
     borderRadius: radius.full,
     padding: '2px 10px',
     alignSelf: 'flex-start',
@@ -964,18 +1171,26 @@ const todoRowStyle: React.CSSProperties = {
     borderTop: `1px solid ${colors.brand.border}`,
 }
 
-// 祈福卡片待办行（分割线用青色，透明度更低）
+// 祈福卡片待办行（分割线用 onBright 基准色）
 const blessingTodoRowStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '10px 0',
-    borderTop: `1px solid ${withAlpha(colors.fortune.blessing, 0.15)}`,
+    borderTop: `1px solid ${withAlpha(colors.text.onBright, 0.15)}`,
+}
+
+// 祈福待办行前缀·
+const todoRowPrefixStyle: React.CSSProperties = {
+    fontSize: fontSize.base,
+    color: withAlpha(colors.text.onBright, 0.50),
+    flexShrink: 0,
+    lineHeight: 1,
 }
 
 // 待办文字
 const todoRowTextStyle: React.CSSProperties = {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     color: whiteAlpha(0.75),
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1017,7 +1232,7 @@ function getFortuneOverlayCardStyle(index: number, isOpen: boolean, color: strin
         width: 'auto',
         zIndex: 40 + index,
         opacity: isOpen ? 1 : 0,
-        border: `1px solid ${color}55`,
+        border: `1px solid ${withAlpha(color, 0.60)}`,
         boxShadow: isOpen ? `0 26px 60px ${color}26` : `0 12px 26px ${color}18`,
         transform: isOpen
             ? `translate(calc(-50% + ${openXOffsets[index]}px), calc(-50% + ${openYOffsets[index]}px)) rotate(${FORTUNE_OVERLAY_ROTATIONS[index]}deg)`
@@ -1028,11 +1243,12 @@ function getFortuneOverlayCardStyle(index: number, isOpen: boolean, color: strin
 function getSpecialDayOverlayCardStyle(index: number, total: number, isOpen: boolean, sourceRect: DOMRect | null): React.CSSProperties {
     const count = Math.min(total, 4)
     // 根据卡片数量动态计算 X 间距，均匀分布
-    const xStep = 195
+    const xStep = 240
     const startX = -(count - 1) * xStep / 2
     const openXOffsets = Array.from({ length: count }, (_, i) => startX + i * xStep)
-    // Y 偏移：1张居中，多张拱形
-    const openYOffsets = count === 1 ? [0] : [35, -10, -10, 35].slice(0, count)
+    // Y 偏移：1张居中，2张同高，3/4张轻微拱形
+    const yOffsetMap: Record<number, number[]> = { 1: [0], 2: [0, 0], 3: [20, -10, 20], 4: [20, -10, -10, 20] }
+    const openYOffsets = yOffsetMap[count] ?? [0]
     // 旋转：始终以0为中轴对称均匀分布，垂直方向正中的牌旋转为0
     const maxRotation = count <= 1 ? 0 : count === 2 ? 8 : count === 3 ? 10 : 15
     const rotations = Array.from({ length: count }, (_, i) => {
