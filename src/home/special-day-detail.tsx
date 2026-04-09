@@ -1,7 +1,7 @@
 import React, { ReactElement, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { paths } from '../router/urls'
-import { colors, fontSize, fontWeight, radius, spacing, whiteAlpha } from '../styles/tokens'
+import { colors, fontSize, fontWeight, radius, spacing, whiteAlpha, withAlpha } from '../styles/tokens'
 import { SolarDay } from 'tyme4ts'
 import { sendProjectionMessage } from '../utils/projection-channel'
 import { getBaziInfoStr, getCurrentTimeWuxing } from '../utils/bazi-store'
@@ -514,9 +514,9 @@ const ganSubLabelStyle: React.CSSProperties = { fontSize: fontSize.xs, color: co
 const xSymbolStyle: React.CSSProperties = { fontSize: '24px', color: whiteAlpha(0.5), lineHeight: 1 }
 const tenGodLabelStyle: React.CSSProperties = { fontSize: fontSize.xs, color: whiteAlpha(0.5) }
 const ganZhiDotStyle: React.CSSProperties = { width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }
-const contentStyle: React.CSSProperties = { fontSize: fontSize.md, color: colors.text.secondary, lineHeight: 1.8, margin: 0 }
+const contentStyle: React.CSSProperties = { fontSize: fontSize.md, color: colors.text.primary, lineHeight: 1.8, margin: 0 }
 const meaningStyle: React.CSSProperties = {
-    fontSize: fontSize.base, color: colors.text.muted, fontStyle: 'italic',
+    fontSize: fontSize.base, color: withAlpha(colors.text.primary, 0.62), fontStyle: 'italic',
     margin: `0 0 ${spacing.md}px`, letterSpacing: '0.5px',
 }
 const voiceBarStyle: React.CSSProperties = {

@@ -526,9 +526,9 @@ export default function CalendarHome(): ReactElement {
                                         ...fortuneDeckCardStyle,
                                         transform: `translate(-50%, -50%) rotate(${FORTUNE_STACK_ROTATIONS[index]}deg) translateX(${(index - 1.5) * 48}px) translateY(${index * 4}px)`,
                                         zIndex: 10 + index,
-                                        border: `1px solid ${item.color}44`,
+                                        border: `1px solid ${withAlpha(item.color, 0.6)}`,
                                         boxShadow: `0 20px 40px ${item.color}22`,
-                                        background: `linear-gradient(180deg, ${withAlpha(item.color, 0.12)} 0%, ${withAlpha(item.color, 0.06)} 100%)`,
+                                        background: `linear-gradient(180deg, ${withAlpha(item.color, 0.36)} 0%, ${withAlpha(item.color, 0.30)} 100%)`,
                                     }}
                                 >
                                     <div style={fortuneCardTopStyle}>
@@ -561,7 +561,8 @@ export default function CalendarHome(): ReactElement {
                                 style={{
                                     ...fortuneDeckCardStyle,
                                     ...getFortuneOverlayCardStyle(index, isFortuneOverlayOpen, item.color, fortuneSourceRect),
-                                    background: withAlpha(item.color, 0.22),
+                                    border: `1px solid ${withAlpha(item.color, 0.6)}`,
+                                    background: withAlpha(item.color, 0.38),
                                 }}
                                 onClick={e => {
                                     e.stopPropagation()
@@ -620,7 +621,8 @@ export default function CalendarHome(): ReactElement {
                                 style={{
                                     ...fortuneDeckCardStyle,
                                     ...getSpecialDayOverlayCardStyle(index, specialDays.length, isSpecialDayOverlayOpen, specialDaySourceRect),
-                                    background: withAlpha(colors.brand.light, 0.22),
+                                    border: `1px solid ${withAlpha(colors.brand.light, 0.6)}`,
+                                    background: withAlpha(colors.brand.light, 0.38),
                                 }}
                                 onClick={e => {
                                     e.stopPropagation()
@@ -995,7 +997,7 @@ const fortuneCardBgImgStyle: React.CSSProperties = {
     height: '100%',
     objectFit: 'cover',
     objectPosition: 'center',
-    opacity: 0.2,
+    opacity: 0.34,
     zIndex: 0,
     borderRadius: '28px',
     pointerEvents: 'none',
@@ -1021,8 +1023,8 @@ const fortuneTagStyle: React.CSSProperties = {
 const fortuneOverlayActionStyle: React.CSSProperties = {
     alignSelf: 'flex-start',
     fontSize: fontSize.xs,
-    color: withAlpha(colors.text.primary, 0.55),
-    background: withAlpha(colors.text.primary, 0.08),
+    color: withAlpha('#1e1405', 0.72),
+    background: withAlpha('#1e1405', 0.16),
     borderRadius: radius.full,
     padding: '6px 12px',
 }

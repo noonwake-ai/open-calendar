@@ -397,7 +397,7 @@ const tagStyle: React.CSSProperties = {
     borderRadius: radius.full, fontSize: fontSize.sm, letterSpacing: '0.5px',
 }
 const meaningStyle: React.CSSProperties = {
-    fontSize: fontSize.base, color: colors.text.muted, fontStyle: 'italic',
+    fontSize: fontSize.base, color: withAlpha(colors.text.primary, 0.62), fontStyle: 'italic',
     margin: `0 0 ${spacing.md}px`, letterSpacing: '0.5px',
 }
 const fortuneIndexStyle: React.CSSProperties = {
