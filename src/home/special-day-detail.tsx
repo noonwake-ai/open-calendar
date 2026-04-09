@@ -397,7 +397,6 @@ export default function SpecialDayDetail(): ReactElement {
                         <ReadingLoading text="正在生成特殊日解读..." />
                     ) : (
                         <>
-                            {reportData && <p style={meaningStyle}>{reportData.meaning}</p>}
                             <p style={contentStyle}>{displayContent}</p>
                         </>
                     )}
@@ -469,7 +468,3 @@ const xSymbolStyle: React.CSSProperties = { fontSize: '24px', color: whiteAlpha(
 const tenGodLabelStyle: React.CSSProperties = { fontSize: fontSize.xs, color: whiteAlpha(0.5) }
 const ganZhiDotStyle: React.CSSProperties = { width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }
 const contentStyle: React.CSSProperties = { fontSize: fontSize.md, color: colors.text.primary, lineHeight: 1.8, margin: 0 }
-const meaningStyle: React.CSSProperties = {
-    fontSize: fontSize.base, color: withAlpha(colors.text.primary, 0.62), fontStyle: 'italic',
-    margin: `0 0 ${spacing.md}px`, letterSpacing: '0.5px',
-}

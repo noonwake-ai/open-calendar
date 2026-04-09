@@ -260,7 +260,6 @@ export default function FortuneTypeDetail(): ReactElement {
                                 {'★'.repeat(display.fortune_index)}{'☆'.repeat(5 - display.fortune_index)}
                             </div>
 
-                            <p style={meaningStyle}>{display.meaning}</p>
 
                             <p style={contentStyle}>{display.reading}</p>
                         </>
@@ -340,10 +339,6 @@ const tagsRowStyle: React.CSSProperties = {
 const tagStyle: React.CSSProperties = {
     padding: `4px ${spacing.sm}px`, border: '1px solid',
     borderRadius: radius.full, fontSize: fontSize.sm, letterSpacing: '0.5px',
-}
-const meaningStyle: React.CSSProperties = {
-    fontSize: fontSize.base, color: withAlpha(colors.text.primary, 0.62), fontStyle: 'italic',
-    margin: `0 0 ${spacing.md}px`, letterSpacing: '0.5px',
 }
 const fortuneIndexStyle: React.CSSProperties = {
     fontSize: fontSize.xl, color: colors.brand.light, letterSpacing: '4px', marginBottom: `${spacing.md}px`,
