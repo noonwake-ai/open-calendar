@@ -18,6 +18,9 @@ import { publicAssetUrl } from '../utils/public-asset-url'
 import printer from '../utils/printer'
 import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
 import { getTodoCategory } from './todo-meta'
+import stepAskingMp3 from '../assets/tts/step-asking.mp3'
+import stepReadyMp3 from '../assets/tts/step-ready.mp3'
+import stepInterpretingMp3 from '../assets/tts/step-interpreting.mp3'
 
 const CARD_SIZE = 120
 const BASE_SPIN_SPEED = 8
@@ -36,6 +39,7 @@ const SLOT_CONFIG = [
 ] as const
 
 type Step = 'asking' | 'ready' | 'spinning' | 'interpreting' | 'result'
+type Stoppable = { stop(): void }
 
 const TTS_VOICE_TYPE = 'zh_female_xiaohe_uranus_bigtts'
 
@@ -485,7 +489,7 @@ export default function ShakeHexagram(): ReactElement {
     const [reportData, setReportData] = useState<ReportData | null>(null)
     const [streamingReading, setStreamingReading] = useState('')
     const [_ttsPlaying, setTtsPlaying] = useState(false)
-    const ttsPlayerRef = useRef<TTSPlayer | null>(null)
+    const ttsPlayerRef = useRef<Stoppable | null>(null)
     const doubaoRef = useRef<DoubaoRealtimeChat | null>(null)
     const [doubaoReady, setDoubaoReady] = useState(false)
     const autoStopTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -500,23 +504,39 @@ export default function ShakeHexagram(): ReactElement {
         }
     }, [])
 
-    // 步骤切换时播放固定 TTS 提示语
+    // 步骤切换时播放本地预生成的固定提示语（无网络延迟）
     useEffect(() => {
-        const stepTexts: Partial<Record<Step, string>> = {
-            asking:      '请按住语音键，说出你的疑问',
-            ready:       '请拉动摇杆，获取卦象',
-            interpreting:'卦象解读中，请静心等待',
+        const stepAudioUrls: Partial<Record<Step, string>> = {
+            asking:       stepAskingMp3,
+            ready:        stepReadyMp3,
+            interpreting: stepInterpretingMp3,
         }
-        const text = stepTexts[step]
-        if (!text) return  // result 步骤走 fetchReport 里的 TTS，不在此处处理
+        const url = stepAudioUrls[step]
+        if (!url) return  // result 步骤走 fetchReport 里的 TTS，不在此处处理
 
         ttsPlayerRef.current?.stop()
-        const player = new TTSPlayer(TTS_VOICE_TYPE, (playing) => setTtsPlaying(playing))
-        ttsPlayerRef.current = player
-        player.feed(text)
-        player.flush()
 
-        return () => { player.stop() }
+        const audio = new Audio(url)
+        audio.onplay  = () => setTtsPlaying(true)
+        audio.onended = () => setTtsPlaying(false)
+
+        // Reason: stop() 时先清除回调，防止被覆盖后的 onended 触发 stale 状态更新
+        const handle: Stoppable = {
+            stop() {
+                audio.onplay = null
+                audio.onended = null
+                audio.onpause = null
+                audio.pause()
+                audio.currentTime = 0
+                setTtsPlaying(false)
+            },
+        }
+        ttsPlayerRef.current = handle
+
+        audio.play().catch(e => console.warn('[TTS] 本地步骤音频播放失败:', e))
+
+        // Reason: 闭包捕获 handle，只停本次 effect 创建的音频，不影响 fetchReport 的动态 TTS
+        return () => { handle.stop() }
     }, [step])
 
     // upper = collectedResults[3..5], lower = collectedResults[0..2]
