@@ -6,7 +6,7 @@ import { sendProjectionMessage } from '../utils/projection-channel'
 import { getBaziInfoStr, getCurrentTimeWuxing } from '../utils/bazi-store'
 import { TTSPlayer } from '../utils/volcan-tts'
 import { cleanLLMResponse } from '../common/utils'
-import { saveBlessings } from '../utils/local-db'
+import { saveBlessings, type BlessingInput, type BlessingTag } from '../utils/local-db'
 import { getUserId } from '../utils/user-store'
 import { createSpeechRecognizer, getAsrWsUrl } from '../utils/speech-recognition'
 import { DoubaoRealtimeChat, type HexagramChatInputs } from '../utils/doubao-realtime'
@@ -17,6 +17,7 @@ import PrintSignCard from '../components/print-sign-card'
 import { publicAssetUrl } from '../utils/public-asset-url'
 import printer from '../utils/printer'
 import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
+import { getTodoCategory } from './todo-meta'
 
 const CARD_SIZE = 120
 const BASE_SPIN_SPEED = 8
@@ -45,7 +46,7 @@ interface ReportData {
     reading: string
     inscription: [string, string]
     meaning: string
-    blessings: Array<{ item: string; date: string }>
+    blessings: BlessingInput[]
 }
 
 function previewText(text: string, max = 240): string {
@@ -61,6 +62,58 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
         }
     }
     return { message: String(error) }
+}
+
+function normalizeInscription(value: unknown): [string, string] {
+    const items = Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).slice(0, 2)
+        : []
+
+    while (items.length < 2) items.push('')
+    return [items[0], items[1]]
+}
+
+function normalizeBlessingTag(value: unknown, textForFallback: string): BlessingTag {
+    if (value === 'love' || value === 'wealth' || value === 'study' || value === 'career') {
+        return value
+    }
+    return getTodoCategory(textForFallback)
+}
+
+function normalizeBlessings(value: unknown): BlessingInput[] {
+    if (!Array.isArray(value)) return []
+
+    return value.flatMap(item => {
+        if (!item || typeof item !== 'object') return []
+
+        const record = item as Record<string, unknown>
+        const itemText = typeof record.item === 'string' ? record.item.trim() : ''
+        const reasonText = typeof record.reason === 'string' ? record.reason.trim() : ''
+        const blessing: BlessingInput = {
+            item: itemText,
+            reason: reasonText,
+            tag: normalizeBlessingTag(record.tag, `${itemText} ${reasonText}`.trim()),
+            date: typeof record.date === 'string' ? record.date.trim() : '',
+        }
+
+        if (!blessing.item || !blessing.date) return []
+        return [blessing]
+    })
+}
+
+function normalizeReportData(value: unknown): ReportData {
+    if (!value || typeof value !== 'object') throw new Error('Dify 返回 JSON 结构无效')
+
+    const record = value as Record<string, unknown>
+    const reading = typeof record.reading === 'string' ? record.reading.trim() : ''
+    const meaning = typeof record.meaning === 'string' ? record.meaning.trim() : ''
+    const inscription = normalizeInscription(record.inscription)
+    const blessings = normalizeBlessings(record.blessings)
+
+    if (!reading) throw new Error('Dify 返回缺少 reading')
+    if (!meaning) throw new Error('Dify 返回缺少 meaning')
+
+    return { reading, inscription, meaning, blessings }
 }
 
 interface SlotState {
@@ -678,7 +731,7 @@ export default function ShakeHexagram(): ReactElement {
                     jsonPreview: previewText(jsonStr),
                 })
 
-                const data = JSON.parse(jsonStr) as ReportData
+                const data = normalizeReportData(JSON.parse(jsonStr))
                 reportPiEventConsumerLog('consumer:shake', 'report.parse.success', {
                     inscription: data.inscription,
                     meaning: data.meaning,
@@ -809,6 +862,7 @@ export default function ShakeHexagram(): ReactElement {
                                         <div key={i} style={blessingItemStyle}>
                                             <span style={blessingDateStyle}>{b.date}</span>
                                             <span style={blessingTextStyle}>{b.item}</span>
+                                            {b.reason && <span style={blessingReasonStyle}>{b.reason}</span>}
                                         </div>
                                     ))}
                                 </div>
@@ -1089,6 +1143,12 @@ const blessingItemStyle: React.CSSProperties = {
 const blessingTextStyle: React.CSSProperties = {
     fontSize: fontSize.sm,
     color: colors.text.secondary,
+}
+
+const blessingReasonStyle: React.CSSProperties = {
+    fontSize: fontSize.xs,
+    color: colors.text.muted,
+    lineHeight: 1.5,
 }
 
 const blessingDateStyle: React.CSSProperties = {

@@ -5,7 +5,7 @@ import { colors, fontSize, fontWeight, radius, spacing, withAlpha } from '../sty
 import { SolarDay } from 'tyme4ts'
 import BackButton from '../components/back-button'
 import { Blessing, listAllBlessings, toggleBlessingCompleted } from '../utils/local-db'
-import { buildTodoCategoryMap, TODO_CATEGORY_COLORS, getTodoCategory, TodoCategoryKey } from './todo-meta'
+import { buildTodoCategoryMap, TODO_CATEGORY_COLORS, TodoCategoryKey } from './todo-meta'
 
 const WEEKDAYS_CN = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -18,52 +18,43 @@ const CATEGORY_META: Record<TodoCategoryKey, { icon: string; label: string; colo
 
 export interface TodoItem {
     id: string
-    text: string
+    item: string
+    reason: string
+    tag: TodoCategoryKey
+    question: string
+    hexagramName: string
     time?: string
     completed: boolean
     date: string // "YYYY-MM-DD"
 }
 
-// Mock data - will be replaced by AI-generated content based on user birth fortune
+// 历史模拟数据：用于比赛演示，表示用户此前摇卦后沉淀下来的祈福事项。
+// 要求：每条都必须能追溯到具体问题，不能写成泛化待办。
 export const INITIAL_TODOS: TodoItem[] = [
-    // 4月1日
-    { id: '1',  text: '晨起冥想，调和今日气场', time: '07:00', completed: false, date: '2026-04-01' },
-    { id: '3',  text: '午后避免重大财务决策', time: '13:00', completed: true, date: '2026-04-01' },
-    // 4月3日
-    { id: '5',  text: '整理工作桌面，理顺气场', time: '09:00', completed: true, date: '2026-04-03' },
-    { id: '6',  text: '下午适合处理财务事项', time: '14:00', completed: false, date: '2026-04-03' },
-    // 4月5日
-    { id: '7',  text: '晚间适合学习新技能', time: '20:00', completed: false, date: '2026-04-05' },
-    { id: '8',  text: '静心阅读，提升文昌运', completed: false, date: '2026-04-05' },
-    // 4月9日
-    { id: '9',  text: '查阅投资资讯，把握财机', time: '10:00', completed: false, date: '2026-04-09' },
-    // 4月11日（桃花 × 2）
-    { id: '10', text: '约见心仪之人，主动表达心意', time: '14:00', completed: false, date: '2026-04-11' },
-    { id: '11', text: '精心打扮，提升个人魅力', completed: false, date: '2026-04-11' },
-    { id: '12', text: '下午复习近期学习内容', time: '15:00', completed: false, date: '2026-04-11' },
-    // 4月14日
-    { id: '13', text: '拜访长辈，增进家庭感情', time: '11:00', completed: false, date: '2026-04-14' },
-    // 4月18日
-    { id: '14', text: '练习书法或绘画，养心性', time: '10:00', completed: false, date: '2026-04-18' },
-    { id: '15', text: '傍晚与伴侣共进晚餐', time: '18:30', completed: false, date: '2026-04-18' },
-    // 4月22日
-    { id: '2',  text: '佩戴红色饰品增强桃花运', completed: false, date: '2026-04-22' },
-    { id: '4',  text: '傍晚适合与家人聚餐', time: '18:00', completed: false, date: '2026-04-22' },
-    { id: '16', text: '专注学习一项新技能', time: '10:00', completed: false, date: '2026-04-22' },
-    // 4月26日
-    { id: '17', text: '制定下月事业规划', time: '09:30', completed: false, date: '2026-04-26' },
-    { id: '18', text: '理顺近期财务账目', time: '16:00', completed: false, date: '2026-04-26' },
-    // 5月4日
-    { id: '19', text: '阅读专业书籍，充实学业', time: '10:00', completed: false, date: '2026-05-04' },
-    // 5月8日
-    { id: '20', text: '研究新理财方向，谨慎决策', time: '10:00', completed: false, date: '2026-05-08' },
-    { id: '21', text: '与同事协作，推进项目', time: '14:00', completed: false, date: '2026-05-08' },
-    // 5月13日
-    { id: '22', text: '精心准备浪漫约会', time: '18:00', completed: false, date: '2026-05-13' },
-    // 4月9日（补充财运）
-    { id: '23', text: '整理近月收支账目，把握消费节奏', time: '15:00', completed: false, date: '2026-04-09' },
-    // 4月22日（补充财运）
-    { id: '24', text: '关注投资动态，避免冲动消费', time: '11:00', completed: false, date: '2026-04-22' },
+    { id: '1',  date: '2026-04-01', time: '07:00', item: '定一志愿', reason: '目标不钉住，后面复习很容易越学越散', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
+    { id: '3',  date: '2026-04-01', time: '13:00', item: '补数学错题', reason: '反复失分不止住，冲刺期会越学越慌', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: true },
+    { id: '5',  date: '2026-04-03', time: '09:00', item: '改简历首屏', reason: '第一眼没打中重点，机会容易直接滑走', tag: 'career', question: '今年跳槽能成吗？', hexagramName: '晋', completed: true },
+    { id: '6',  date: '2026-04-03', time: '14:00', item: '谈清薪资线', reason: '这次卡点不在机会，在你敢不敢谈底线', tag: 'wealth', question: '今年跳槽能成吗？', hexagramName: '晋', completed: false },
+    { id: '7',  date: '2026-04-05', time: '20:00', item: '先停追问', reason: '你越急着求答案，对方越容易往后退', tag: 'love', question: '还能和前任复合吗？', hexagramName: '复', completed: false },
+    { id: '8',  date: '2026-04-05', item: '发次近况', reason: '这次宜轻轻递话，不宜把情绪一下倒满', tag: 'love', question: '还能和前任复合吗？', hexagramName: '复', completed: false },
+    { id: '9',  date: '2026-04-09', time: '10:00', item: '先看回撤', reason: '现在先看能亏多少，不是先想能赚多少', tag: 'wealth', question: '这笔投资能做吗？', hexagramName: '节', completed: false },
+    { id: '10', date: '2026-04-11', time: '14:00', item: '先通口径', reason: '两边期待不对齐，见面越早越容易别扭', tag: 'love', question: '这段关系要不要见家长？', hexagramName: '家人', completed: false },
+    { id: '11', date: '2026-04-11', item: '定见面界线', reason: '先说好聊到哪，不然现场容易失分', tag: 'love', question: '这段关系要不要见家长？', hexagramName: '家人', completed: false },
+    { id: '12', date: '2026-04-11', time: '15:00', item: '复盘错题', reason: '临时抱佛脚没用，先找最常错的点', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
+    { id: '13', date: '2026-04-14', time: '11:00', item: '先做体检', reason: '这件事先看身体底子，别只靠心急往前冲', tag: 'love', question: '今年要不要备孕？', hexagramName: '家人', completed: false },
+    { id: '14', date: '2026-04-18', time: '10:00', item: '重排作息', reason: '后劲比猛冲更要紧，先把高效时段固定住', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
+    { id: '15', date: '2026-04-18', time: '18:30', item: '约短见面', reason: '关系要不要续，见一面比隔空猜更准', tag: 'love', question: '还能和前任复合吗？', hexagramName: '复', completed: false },
+    { id: '2',  date: '2026-04-22', item: '别急定性', reason: '现在还在试探期，太快下结论容易看偏', tag: 'love', question: '相亲对象值得继续吗？', hexagramName: '咸', completed: false },
+    { id: '4',  date: '2026-04-22', time: '18:00', item: '约家里聊聊', reason: '先听家里真实顾虑，别临见面再补漏洞', tag: 'love', question: '这段关系要不要见家长？', hexagramName: '家人', completed: false },
+    { id: '16', date: '2026-04-22', time: '10:00', item: '学一小节', reason: '别想着全补完，先吃透最卡的一个点', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
+    { id: '17', date: '2026-04-26', time: '09:30', item: '先算保本线', reason: '眼下最怕热血上头，账一不清后面全乱', tag: 'wealth', question: '现在适合创业开店吗？', hexagramName: '鼎', completed: false },
+    { id: '18', date: '2026-04-26', time: '16:00', item: '谈清分工', reason: '合伙最怕好话说满，丑话没先摆清', tag: 'career', question: '现在适合创业开店吗？', hexagramName: '鼎', completed: false },
+    { id: '19', date: '2026-05-04', time: '10:00', item: '读真题卷', reason: '别再乱刷资料，先摸清出题人的脾气', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
+    { id: '20', date: '2026-05-08', time: '10:00', item: '写退出线', reason: '没退路的决定，后面最容易越补越乱', tag: 'wealth', question: '这笔投资能做吗？', hexagramName: '节', completed: false },
+    { id: '21', date: '2026-05-08', time: '14:00', item: '投三家公司', reason: '这阵子宜稳不宜散，少投但要投得准', tag: 'career', question: '今年跳槽能成吗？', hexagramName: '晋', completed: false },
+    { id: '22', date: '2026-05-13', time: '18:00', item: '准备见面', reason: '别只在线上聊，见面后的感受才最准', tag: 'love', question: '相亲对象值得继续吗？', hexagramName: '咸', completed: false },
+    { id: '23', date: '2026-04-09', time: '15:00', item: '查资金锁期', reason: '流动性一锁死，后面想转身就难了', tag: 'wealth', question: '这笔投资能做吗？', hexagramName: '节', completed: false },
+    { id: '24', date: '2026-04-22', time: '11:00', item: '只下小仓', reason: '这卦不怕试，就怕一把压重把心态压坏', tag: 'wealth', question: '这笔投资能做吗？', hexagramName: '节', completed: false },
 ]
 
 export function formatDateKey(date: Date): string {
@@ -134,7 +125,7 @@ export default function TodoCalendar(): ReactElement {
     // Group todos by category, sorted by earliest time in each group
     const todoByCategoryEntries: Array<{ meta: { icon: string; label: string; color: string }; items: TodoItem[] }> = []
     for (const [key, meta] of Object.entries(CATEGORY_META) as [TodoCategoryKey, typeof CATEGORY_META[TodoCategoryKey]][]) {
-        const items = selectedTodos.filter(t => getTodoCategory(t.text) === key)
+        const items = selectedTodos.filter(t => t.tag === key)
         if (items.length > 0) todoByCategoryEntries.push({ meta, items })
     }
     todoByCategoryEntries.sort((a, b) => {
@@ -267,6 +258,9 @@ export default function TodoCalendar(): ReactElement {
                                                 }}>
                                                     {blessing.item}
                                                 </span>
+                                                {blessing.reason && (
+                                                    <span style={blessingReasonStyle}>{blessing.reason}</span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -299,8 +293,9 @@ export default function TodoCalendar(): ReactElement {
                                                     textDecoration: todo.completed ? 'line-through' : 'none',
                                                     textDecorationColor: withAlpha(colors.white, 0.3),
                                                 }}>
-                                                    {todo.text}
+                                                    {todo.item}
                                                 </span>
+                                                <span style={todoReasonStyle}>{todo.reason}</span>
                                                 {todo.time && (
                                                     <span style={todoTimeStyle}>{todo.time}</span>
                                                 )}
@@ -494,6 +489,22 @@ const todoTimeStyle: React.CSSProperties = {
     fontSize: fontSize.xs,
     color: withAlpha(colors.white, 0.35),
     marginTop: '2px',
+}
+
+const todoReasonStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: fontSize.xs,
+    color: withAlpha(colors.white, 0.48),
+    marginTop: '4px',
+    lineHeight: 1.5,
+}
+
+const blessingReasonStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: fontSize.xs,
+    color: withAlpha(colors.white, 0.48),
+    marginTop: '4px',
+    lineHeight: 1.5,
 }
 
 const emptyStyle: React.CSSProperties = {

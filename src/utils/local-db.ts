@@ -11,11 +11,22 @@ export interface Conversation {
 export interface Blessing {
     id?: number
     item: string
+    reason?: string
+    tag?: BlessingTag
     date: string // YYYY-MM-DD
     hexagramName: string
     question: string
     completed: boolean
     createdAt: number
+}
+
+export type BlessingTag = 'love' | 'wealth' | 'study' | 'career'
+
+export interface BlessingInput {
+    item: string
+    reason?: string
+    tag?: BlessingTag
+    date: string
 }
 
 export interface ReportCache {
@@ -74,10 +85,17 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 
 // ========== Blessings ==========
 
-export async function saveBlessings(blessings: Array<{ item: string; date: string }>, hexagramName: string, question: string): Promise<void> {
+export function formatBlessingSummary(blessing: Pick<BlessingInput, 'item' | 'reason'>): string {
+    const reason = blessing.reason?.trim()
+    return reason ? `${blessing.item}｜${reason}` : blessing.item
+}
+
+export async function saveBlessings(blessings: BlessingInput[], hexagramName: string, question: string): Promise<void> {
     const now = Date.now()
     const records: Blessing[] = blessings.map(b => ({
         item: b.item,
+        reason: b.reason?.trim() || undefined,
+        tag: b.tag,
         date: b.date,
         hexagramName,
         question,
