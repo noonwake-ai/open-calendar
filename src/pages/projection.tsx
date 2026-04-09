@@ -2,7 +2,6 @@ import React, { ReactElement, useEffect, useRef, useState, useCallback } from 'r
 import { getProjectionVideos } from '../video/tengod-projection-videos'
 import { listenProjectionChannel } from '../utils/projection-channel'
 import { TengodId } from '../common/utils/bazi'
-import { whiteAlpha } from '../styles/tokens'
 
 type ProjectionScene = 'sleep' | 'idle' | 'wake' | 'interpret' | 'casting'
 
@@ -25,9 +24,12 @@ export default function ProjectionScreen(): ReactElement {
     }, [])
 
     // Reason: 就地更新 video.src，不销毁 DOM 元素，避免 Pi compositor 重建 surface 导致白闪
+    // Reason: 投影窗口无直接用户手势，Chrome 会拒绝带音频视频的 autoplay（即便 play() 有时不 reject 而是内部 suspend，
+    //         catch 也不会触发）。解法：play() 前先静音确保 play 成功，play 启动后立即取消静音恢复音频
     const playVideo = useCallback((src: string) => {
         const el = videoRef.current
         if (!el) return
+        el.muted = true
         el.src = src
         el.load()
         el.play().catch(() => {})
@@ -170,17 +172,3 @@ const videoStyle: React.CSSProperties = {
     background: '#000000',
 }
 
-const centerStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100vw',
-    height: '100vh',
-    background: 'radial-gradient(circle at top, #26203c 0%, #09090b 58%)',
-}
-
-const statusTextStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: '18px',
-    color: whiteAlpha(0.82),
-}
