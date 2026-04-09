@@ -710,15 +710,31 @@ export default function ShakeHexagram(): ReactElement {
                     answerPreview: previewText(answerText, 500),
                 })
                 console.error('解卦失败:', e, '\nanswerText长度:', answerText.length, '\n预览:', answerText.substring(0, 500))
+                // Reason: Dify 不可用时 fallback 到基于卦名的通用解读
                 if (!cancelled) {
-                    setReportData({
-                        reading: '解卦出了点问题，请重新摇卦试试。',
-                        inscription: ['重新一试', ''] as [string, string],
-                        meaning: '稍后再来',
+                    const fallbackReading = `得${hexagramDesc}。此卦象显示当前局势正在转化之中，宜静观其变，顺势而为。凡事不必急于求成，保持内心安定，自能逢凶化吉。近期行事以稳健为上，切勿冲动冒进，待时机成熟再做决断，必有所获。`
+                    const fallbackData: ReportData = {
+                        reading: fallbackReading,
+                        inscription: ['顺势而为', '静待花开'] as [string, string],
+                        meaning: '静观其变，稳中求进',
                         blessings: [],
-                    })
-                    setStreamingReading('解卦出了点问题，请重新摇卦试试。')
+                    }
+                    setReportData(fallbackData)
+                    setStreamingReading(fallbackReading)
                     setStep('result')
+
+                    // Reason: fallback 时仍用 TTS 播报解读内容
+                    const ttsPlayer = new TTSPlayer(TTS_VOICE_TYPE, (playing) => {
+                        setTtsPlaying(playing)
+                        if (playing) {
+                            sendProjectionMessage({ type: 'trigger_scene', scene: 'interpret' })
+                        } else {
+                            sendProjectionMessage({ type: 'trigger_scene', scene: 'idle' })
+                        }
+                    })
+                    ttsPlayerRef.current = ttsPlayer
+                    ttsPlayer.feed(fallbackReading)
+                    ttsPlayer.flush()
                 }
             }
         }
