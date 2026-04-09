@@ -447,6 +447,25 @@ export default function ShakeHexagram(): ReactElement {
         }
     }, [])
 
+    // 步骤切换时播放固定 TTS 提示语
+    useEffect(() => {
+        const stepTexts: Partial<Record<Step, string>> = {
+            asking:      '一事一问，莫纠结，勿多疑',
+            ready:       '请拉动摇杆，获取卦象',
+            interpreting:'卦象解读中，请静心等待',
+        }
+        const text = stepTexts[step]
+        if (!text) return  // result 步骤走 fetchReport 里的 TTS，不在此处处理
+
+        ttsPlayerRef.current?.stop()
+        const player = new TTSPlayer(TTS_VOICE_TYPE, (playing) => setTtsPlaying(playing))
+        ttsPlayerRef.current = player
+        player.feed(text)
+        player.flush()
+
+        return () => { player.stop() }
+    }, [step])
+
     // upper = collectedResults[3..5], lower = collectedResults[0..2]
     // value = upper + lower, matching App's hexagram = upperHexagram + lowerHexagram
     const hexagramValue = collectedResults.every(r => r !== null)
