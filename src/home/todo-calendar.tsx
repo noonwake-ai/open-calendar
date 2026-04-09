@@ -5,7 +5,7 @@ import { colors, fontSize, fontWeight, radius, spacing, withAlpha } from '../sty
 import { SolarDay } from 'tyme4ts'
 import BackButton from '../components/back-button'
 import { Blessing, listAllBlessings, toggleBlessingCompleted } from '../utils/local-db'
-import { buildTodoCategoryMap, TODO_CATEGORY_COLORS, TodoCategoryKey } from './todo-meta'
+import { buildTodoCategoryMap, getTodoCategory, TODO_CATEGORY_COLORS, TodoCategoryKey } from './todo-meta'
 
 const WEEKDAYS_CN = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -28,6 +28,17 @@ export interface TodoItem {
     date: string // "YYYY-MM-DD"
 }
 
+interface DisplayTodoItem {
+    id: string
+    item: string
+    reason?: string
+    tag: TodoCategoryKey
+    time?: string
+    completed: boolean
+    isBlessing: boolean
+    blessingId?: number
+}
+
 // 历史模拟数据：用于比赛演示，表示用户此前摇卦后沉淀下来的祈福事项。
 // 要求：每条都必须能追溯到具体问题，不能写成泛化待办。
 export const INITIAL_TODOS: TodoItem[] = [
@@ -38,6 +49,7 @@ export const INITIAL_TODOS: TodoItem[] = [
     { id: '7',  date: '2026-04-05', time: '20:00', item: '先停追问', reason: '你越急着求答案，对方越容易往后退', tag: 'love', question: '还能和前任复合吗？', hexagramName: '复', completed: false },
     { id: '8',  date: '2026-04-05', item: '发次近况', reason: '这次宜轻轻递话，不宜把情绪一下倒满', tag: 'love', question: '还能和前任复合吗？', hexagramName: '复', completed: false },
     { id: '9',  date: '2026-04-09', time: '10:00', item: '先看回撤', reason: '现在先看能亏多少，不是先想能赚多少', tag: 'wealth', question: '这笔投资能做吗？', hexagramName: '节', completed: false },
+    { id: '25', date: '2026-04-10', time: '19:00', item: '先约一次见面', reason: '光靠聊天试不出感觉，见面后的反馈会更准', tag: 'love', question: '相亲对象值得继续吗？', hexagramName: '咸', completed: false },
     { id: '10', date: '2026-04-11', time: '14:00', item: '先通口径', reason: '两边期待不对齐，见面越早越容易别扭', tag: 'love', question: '这段关系要不要见家长？', hexagramName: '家人', completed: false },
     { id: '11', date: '2026-04-11', item: '定见面界线', reason: '先说好聊到哪，不然现场容易失分', tag: 'love', question: '这段关系要不要见家长？', hexagramName: '家人', completed: false },
     { id: '12', date: '2026-04-11', time: '15:00', item: '复盘错题', reason: '临时抱佛脚没用，先找最常错的点', tag: 'study', question: '年底考研如何？', hexagramName: '乾', completed: false },
@@ -90,8 +102,7 @@ export default function TodoCalendar(): ReactElement {
     const [todos, setTodos] = useState<TodoItem[]>(INITIAL_TODOS)
     const [blessings, setBlessings] = useState<Blessing[]>([])
 
-    const todoCategoryMap = buildTodoCategoryMap(todos)
-    const blessingDates = new Set(blessings.filter(b => !b.completed).map(b => b.date))
+    const todoCategoryMap = buildTodoCategoryMap([...todos, ...blessings])
     const daysInMonth = getDaysInMonth(currentYear, currentMonth)
     const firstDayOfWeek = getFirstDayOfWeek(currentYear, currentMonth)
 
@@ -122,14 +133,35 @@ export default function TodoCalendar(): ReactElement {
     const selectedDay = new Date(selectedDate)
     const selectedLabel = `${selectedDay.getMonth() + 1}月${selectedDay.getDate()}日`
 
-    // Group todos by category, sorted by earliest time in each group
-    const todoByCategoryEntries: Array<{ meta: { icon: string; label: string; color: string }; items: TodoItem[] }> = []
+    const selectedCategoryItems: DisplayTodoItem[] = [
+        ...selectedTodos.map(todo => ({
+            id: todo.id,
+            item: todo.item,
+            reason: todo.reason,
+            tag: todo.tag,
+            time: todo.time,
+            completed: todo.completed,
+            isBlessing: false,
+        })),
+        ...selectedBlessings.map(blessing => ({
+            id: `blessing-${blessing.id ?? `${blessing.date}-${blessing.item}`}`,
+            item: blessing.item,
+            reason: blessing.reason,
+            tag: blessing.tag ?? getTodoCategory(`${blessing.item} ${blessing.reason ?? ''}`.trim()),
+            completed: blessing.completed,
+            isBlessing: true,
+            blessingId: blessing.id,
+        })),
+    ]
+
+    // Group all items by the four fortune categories, sorted by earliest time in each group.
+    const todoByCategoryEntries: Array<{ meta: { icon: string; label: string; color: string }; items: DisplayTodoItem[] }> = []
     for (const [key, meta] of Object.entries(CATEGORY_META) as [TodoCategoryKey, typeof CATEGORY_META[TodoCategoryKey]][]) {
-        const items = selectedTodos.filter(t => t.tag === key)
+        const items = selectedCategoryItems.filter(t => t.tag === key)
         if (items.length > 0) todoByCategoryEntries.push({ meta, items })
     }
     todoByCategoryEntries.sort((a, b) => {
-        const earliest = (items: TodoItem[]) => items.reduce((min, t) => t.time && t.time < min ? t.time : min, '99:99')
+        const earliest = (items: DisplayTodoItem[]) => items.reduce((min, t) => t.time && t.time < min ? t.time : min, '99:99')
         return earliest(a.items).localeCompare(earliest(b.items))
     })
 
@@ -180,7 +212,6 @@ export default function TodoCalendar(): ReactElement {
                         const isToday = cell.key === todayKey
                         const isSelected = cell.key === selectedDate
                         const dayCategories = todoCategoryMap.get(cell.key) ?? []
-                        const hasBlessing = blessingDates.has(cell.key)
                         const lunarText = getLunarDayText(cell.year, cell.month, cell.day)
 
                         let cellStyle: React.CSSProperties = { ...dayCellBase }
@@ -212,7 +243,6 @@ export default function TodoCalendar(): ReactElement {
                                             style={{ ...calTodoDotStyle, background: TODO_CATEGORY_COLORS[category] }}
                                         />
                                     ))}
-                                    {hasBlessing && <span style={calBlessingStarStyle}>★</span>}
                                 </div>
                             </div>
                         )
@@ -225,48 +255,10 @@ export default function TodoCalendar(): ReactElement {
                 <h2 style={todoTitleStyle}>{selectedLabel}</h2>
 
                 <div style={todoListStyle}>
-                    {selectedBlessings.length === 0 && selectedTodos.length === 0 ? (
+                    {selectedCategoryItems.length === 0 ? (
                         <p style={emptyStyle}>今日暂无待办</p>
                     ) : (
                         <>
-                            {/* 祈福分组 */}
-                            {selectedBlessings.length > 0 && (
-                                <div style={todoGroupStyle}>
-                                    <div style={{ ...categoryTagStyle, background: withAlpha(colors.fortune.blessing, 0.12), color: colors.fortune.blessing }}>
-                                        ★ 祈福
-                                    </div>
-                                    {selectedBlessings.map(blessing => (
-                                        <div
-                                            key={`blessing-${blessing.id}`}
-                                            style={todoItemStyle}
-                                            onClick={() => blessing.id && toggleBlessing(blessing.id)}
-                                        >
-                                            <div style={{
-                                                ...checkboxStyle,
-                                                marginTop: '2px',
-                                                background: blessing.completed ? withAlpha(colors.white, 0.85) : 'transparent',
-                                                borderColor: blessing.completed ? withAlpha(colors.white, 0.85) : withAlpha(colors.white, 0.25),
-                                            }}>
-                                                {blessing.completed && <span style={{ color: colors.brand.dark, fontSize: '12px', fontWeight: fontWeight.bold }}>✓</span>}
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <span style={{
-                                                    fontSize: fontSize.base,
-                                                    color: blessing.completed ? withAlpha(colors.white, 0.3) : withAlpha(colors.white, 0.85),
-                                                    textDecoration: blessing.completed ? 'line-through' : 'none',
-                                                    textDecorationColor: withAlpha(colors.white, 0.3),
-                                                }}>
-                                                    {blessing.item}
-                                                </span>
-                                                {blessing.reason && (
-                                                    <span style={blessingReasonStyle}>{blessing.reason}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            {/* 分类待办分组 */}
                             {todoByCategoryEntries.map(({ meta, items }) => (
                                 <div key={meta.label} style={todoGroupStyle}>
                                     <div style={{ ...categoryTagStyle, background: withAlpha(meta.color, 0.12), color: meta.color }}>
@@ -276,7 +268,13 @@ export default function TodoCalendar(): ReactElement {
                                         <div
                                             key={todo.id}
                                             style={todoItemStyle}
-                                            onClick={() => toggleTodo(todo.id)}
+                                            onClick={() => {
+                                                if (todo.isBlessing && todo.blessingId) {
+                                                    void toggleBlessing(todo.blessingId)
+                                                    return
+                                                }
+                                                toggleTodo(todo.id)
+                                            }}
                                         >
                                             <div style={{
                                                 ...checkboxStyle,
@@ -288,14 +286,14 @@ export default function TodoCalendar(): ReactElement {
                                             </div>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <span style={{
-                                                    fontSize: fontSize.base,
+                                                    ...todoTitleTextStyle,
                                                     color: todo.completed ? withAlpha(colors.white, 0.3) : withAlpha(colors.white, 0.85),
                                                     textDecoration: todo.completed ? 'line-through' : 'none',
                                                     textDecorationColor: withAlpha(colors.white, 0.3),
                                                 }}>
                                                     {todo.item}
                                                 </span>
-                                                <span style={todoReasonStyle}>{todo.reason}</span>
+                                                {todo.reason && <span style={todoReasonStyle}>{todo.reason}</span>}
                                                 {todo.time && (
                                                     <span style={todoTimeStyle}>{todo.time}</span>
                                                 )}
@@ -423,12 +421,6 @@ const calendarMarkerRowStyle: React.CSSProperties = {
     height: '10px',
 }
 
-const calBlessingStarStyle: React.CSSProperties = {
-    fontSize: '10px',
-    color: colors.fortune.blessing,
-    lineHeight: 1,
-}
-
 const todoTitleStyle: React.CSSProperties = {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
@@ -484,6 +476,13 @@ const checkboxStyle: React.CSSProperties = {
     flexShrink: 0,
 }
 
+const todoTitleTextStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium,
+    lineHeight: 1.35,
+}
+
 const todoTimeStyle: React.CSSProperties = {
     display: 'block',
     fontSize: fontSize.xs,
@@ -493,15 +492,7 @@ const todoTimeStyle: React.CSSProperties = {
 
 const todoReasonStyle: React.CSSProperties = {
     display: 'block',
-    fontSize: fontSize.xs,
-    color: withAlpha(colors.white, 0.48),
-    marginTop: '4px',
-    lineHeight: 1.5,
-}
-
-const blessingReasonStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     color: withAlpha(colors.white, 0.48),
     marginTop: '4px',
     lineHeight: 1.5,

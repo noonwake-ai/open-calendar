@@ -137,8 +137,6 @@ function formatMonthDay(dateKey: string): string {
     return `${parseInt(parts[1])}月${parseInt(parts[2])}日`
 }
 
-const TODO_CATEGORY_MAP = buildTodoCategoryMap(INITIAL_TODOS)
-
 // 模块级缓存：跨导航保持已唤醒状态；天干地支日期变化时重置
 let _cachedAwakePhase: 'sleep' | 'awake' = 'sleep'
 let _cachedAwakeDate = ''  // 格式：new Date().toDateString()
@@ -370,6 +368,7 @@ export default function CalendarHome(): ReactElement {
     }
 
     const weekDays = getWeekDays(now)
+    const weekTodoCategoryMap = buildTodoCategoryMap(blessings)
     const specialDays = data?.specialDays ?? []
     const firstSpecialDay = specialDays[0] ?? null
     const ganzhiLines = getGanzhiLines(data?.date.ganzhi ?? '')
@@ -422,8 +421,7 @@ export default function CalendarHome(): ReactElement {
                     {weekDays.map((day, i) => {
                         const isToday = isSameDay(day, now)
                         const dayKey = formatDateKey(day)
-                        const todoCategories = TODO_CATEGORY_MAP.get(dayKey) ?? []
-                        const hasBlessing = blessingDates.has(dayKey)
+                        const todoCategories = weekTodoCategoryMap.get(dayKey) ?? []
                         const lunarText = getLunarDayText(day)
                         return (
                             <div key={i} style={isToday ? { ...weekInlineItemStyle, ...weekInlineItemActiveStyle } : weekInlineItemStyle}>
@@ -441,7 +439,6 @@ export default function CalendarHome(): ReactElement {
                                             style={{ width: '6px', height: '6px', borderRadius: radius.full, background: TODO_CATEGORY_COLORS[category], flexShrink: 0 }}
                                         />
                                     ))}
-                                    {hasBlessing && <span style={{ ...weekStarStyle, color: colors.fortune.blessing }}>★</span>}
                                 </div>
                             </div>
                         )
@@ -890,12 +887,6 @@ const weekInlineMarkersStyle: React.CSSProperties = {
     alignItems: 'center',
 }
 
-const weekStarStyle: React.CSSProperties = {
-    fontSize: '8px',
-    lineHeight: 1,
-    flexShrink: 0,
-}
-
 const dashboardStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 2fr) minmax(0, 3fr)',
@@ -922,7 +913,7 @@ const fortunePaneStyle: React.CSSProperties = {
     position: 'relative',
     minHeight: 0,
     minWidth: 0,
-    background: '#2a1e08',
+    background: 'rgb(77 67 50 / 1)',
     border: 'none',
     borderRadius: radius.xl,
     overflow: 'hidden',
