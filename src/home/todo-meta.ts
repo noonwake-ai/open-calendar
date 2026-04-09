@@ -12,7 +12,7 @@ export const BLESSING_COLOR = colors.fortune.blessing
 export type TodoCategoryKey = keyof typeof TODO_CATEGORY_COLORS
 
 interface TodoCategorySource {
-    text?: string
+    item?: string
     tag?: TodoCategoryKey
     date: string
     completed: boolean
@@ -30,7 +30,7 @@ export function buildTodoCategoryMap(items: TodoCategorySource[]): Map<string, T
 
     for (const item of items) {
         if (item.completed) continue
-        const category = item.tag ?? getTodoCategory(item.text ?? '')
+        const category = item.tag ?? getTodoCategory(item.item ?? '')
         const categories = todoCategoryMap.get(item.date) ?? []
         if (!categories.includes(category)) categories.push(category)
         todoCategoryMap.set(item.date, categories)
