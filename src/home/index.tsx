@@ -7,7 +7,7 @@ import { getDeviceToken } from '../utils/device'
 import { startBaziPolling, getActiveBazi } from '../utils/bazi-store'
 import baziHelpers from '../common/helpers/bazi-helpers'
 import { fetchUserInfo, getUser } from '../utils/user-store'
-import { Blessing, listAllBlessings } from '../utils/local-db'
+import { Blessing, formatBlessingSummary, listAllBlessings } from '../utils/local-db'
 import { colors, fontSize, fontWeight, radius, spacing, whiteAlpha, brandAlpha, withAlpha } from '../styles/tokens'
 import { SolarDay } from 'tyme4ts'
 import { INITIAL_TODOS, formatDateKey } from './todo-calendar'
@@ -136,10 +136,12 @@ export default function CalendarHome(): ReactElement {
             const todoItems: Blessing[] = INITIAL_TODOS
                 .filter(t => t.date >= todayKey && !t.completed)
                 .map(t => ({
-                    item: t.text,
+                    item: t.item,
+                    reason: t.reason,
+                    tag: t.tag,
                     date: t.date,
-                    hexagramName: '',
-                    question: '',
+                    hexagramName: t.hexagramName,
+                    question: t.question,
                     completed: t.completed,
                     createdAt: 0,
                 }))
@@ -292,7 +294,7 @@ export default function CalendarHome(): ReactElement {
                         )}
                         {blessings.filter(b => b.date === nearestBlessingDate).map((b, i) => (
                             <div key={b.id ?? i} style={blessingTodoRowStyle}>
-                                <span style={todoRowTextStyle}>{b.item}</span>
+                                <span style={todoRowTextStyle}>{formatBlessingSummary(b)}</span>
                             </div>
                         ))}
                     </div>

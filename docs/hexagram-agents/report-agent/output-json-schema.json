@@ -7,7 +7,8 @@
         "properties": {
             "reading": {
                 "type": "string",
-                "description": "简短的灵纹解读，200字以内，口语化，TTS会朗读。要体现当前十神的独特视角，紧扣用户问题给出明确判断，用生活化比喻，不说空话套话。"
+                "maxLength": 50,
+                "description": "简短的灵纹解读，50字以内，口语化，TTS会朗读。要体现当前十神的独特视角，紧扣用户问题给出明确判断，用生活化比喻，不说空话套话。"
             },
             "inscription": {
                 "type": "array",
@@ -18,24 +19,37 @@
             },
             "meaning": {
                 "type": "string",
-                "description": "辞意，一句话不超过30字，概括灵纹对用户问题的核心启示。"
+                "maxLength": 20,
+                "description": "辞意，一句话不超过20字，概括灵纹对用户问题的核心启示。"
             },
             "blessings": {
                 "type": "array",
-                "description": "需要赐福的事项列表，可为空数组。当用户问题涉及具体行动、决策、时机时给出；笼统感受类问题可为空。",
+                "maxItems": 3,
+                "description": "需要祈福的事项列表，可为空数组。当用户问题涉及具体行动、决策、时机时给出。事项必须直接围绕用户这次摇卦提问的单一事件，不要泛化成日常建议。",
                 "items": {
                     "type": "object",
                     "properties": {
                         "item": {
                             "type": "string",
-                            "description": "赐福事项的简短描述，像待办一样简洁明确。"
+                            "maxLength": 8,
+                            "description": "祈福事项，必须直接推进用户这次提问的那件事，像待办一样简洁明确，不超过8个字。"
+                        },
+                        "reason": {
+                            "type": "string",
+                            "maxLength": 35,
+                            "description": "原因解读，不超过35个字，要直接说明为什么这一步能推进用户这次提问的那件事，并与卦象、问题、阶段卡点呼应。"
+                        },
+                        "tag": {
+                            "type": "string",
+                            "enum": ["love", "wealth", "study", "career"],
+                            "description": "四大运势分类标签。love 对应桃花/家人/感情/约会等；wealth 对应财/理财/投资/收支等；study 对应学习/阅读/复习/课程等；其余默认 career。"
                         },
                         "date": {
                             "type": "string",
                             "description": "具体日期，格式 YYYY-MM-DD，根据当前时间推算出合适的日期。"
                         }
                     },
-                    "required": ["item", "date"],
+                    "required": ["item", "reason", "tag", "date"],
                     "additionalProperties": false
                 }
             }
