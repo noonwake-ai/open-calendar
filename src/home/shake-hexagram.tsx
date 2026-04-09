@@ -92,7 +92,12 @@ function normalizeBlessings(value: unknown): BlessingInput[] {
 
         const record = item as Record<string, unknown>
         const itemText = typeof record.item === 'string' ? record.item.trim() : ''
-        const reasonText = typeof record.reason === 'string' ? record.reason.trim() : ''
+        const reasonSource = typeof record.reason === 'string'
+            ? record.reason
+            : typeof record.Reason === 'string'
+                ? record.Reason
+                : ''
+        const reasonText = reasonSource.trim()
         const blessing: BlessingInput = {
             item: itemText,
             reason: reasonText,
