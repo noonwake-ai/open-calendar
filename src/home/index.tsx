@@ -7,7 +7,7 @@ import { getDeviceToken } from '../utils/device'
 import { startBaziPolling, getActiveBazi, onBaziChange } from '../utils/bazi-store'
 import baziHelpers from '../common/helpers/bazi-helpers'
 import { fetchUserInfo, getUser } from '../utils/user-store'
-import { Blessing, formatBlessingSummary, listAllBlessings } from '../utils/local-db'
+import { Blessing, listAllBlessings } from '../utils/local-db'
 import { colors, fontSize, fontWeight, radius, spacing, whiteAlpha, brandAlpha, withAlpha } from '../styles/tokens'
 import { SolarDay } from 'tyme4ts'
 import { INITIAL_TODOS, formatDateKey } from './todo-calendar'
@@ -455,20 +455,23 @@ export default function CalendarHome(): ReactElement {
                 <div style={{ ...infoCardStyle, background: colors.fortune.blessing, cursor: 'pointer' }} onClick={() => navigate(paths.home.todo, { state: { selectedDate: nearestBlessingDate } })}>
                     <div style={todoCardHeaderRowStyle}>
                         <div style={bottomCardHeaderStyle}>
-                            <span style={{ ...bottomCardTitleStyle, color: colors.text.onBright }}>祈福事项</span>
-                            <span style={{ ...bottomCardIconStyle, color: withAlpha(colors.text.onBright, 0.70) }}>★</span>
+                            <span style={{ ...bottomCardTitleStyle, color: '#1e1405' }}>祈福事项</span>
+                            <span style={{ ...bottomCardIconStyle, color: withAlpha('#1e1405', 0.70) }}>★</span>
                         </div>
                         {nearestBlessingDate && (
-                            <span style={{ ...todoDateInlineStyle, color: withAlpha(colors.text.onBright, 0.50) }}>{formatMonthDay(nearestBlessingDate)}</span>
+                            <span style={{ ...todoDateInlineStyle, color: withAlpha('#1e1405', 0.50) }}>{formatMonthDay(nearestBlessingDate)}</span>
                         )}
                     </div>
                     <div style={todoListStyle}>
                         {blessings.length === 0 && (
-                            <span style={{ ...todoEmptyStyle, color: withAlpha(colors.text.onBright, 0.50) }}>暂无祈福心愿，点击进入添加</span>
+                            <span style={{ ...todoEmptyStyle, color: withAlpha('#1e1405', 0.50) }}>暂无祈福心愿，点击进入添加</span>
                         )}
                         {blessings.filter(b => b.date === nearestBlessingDate).map((b, i) => (
                             <div key={b.id ?? i} style={blessingTodoRowStyle}>
-                                <span style={todoRowTextStyle}>{formatBlessingSummary(b)}</span>
+                                <div style={blessingTodoContentStyle}>
+                                    <span style={blessingTodoItemStyle}>{b.item}</span>
+                                    {b.reason && <span style={blessingTodoReasonStyle}>{b.reason}</span>}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -480,8 +483,8 @@ export default function CalendarHome(): ReactElement {
                     onClick={() => firstSpecialDay && handleOpenSpecialDay()}
                 >
                     <div style={bottomCardHeaderStyle}>
-                        <span style={{ ...bottomCardTitleStyle, color: colors.text.onBright }}>特殊日</span>
-                        <span style={{ ...bottomCardIconStyle, color: withAlpha(colors.text.onBright, 0.70) }}>◎</span>
+                        <span style={{ ...bottomCardTitleStyle, color: '#1e1405' }}>特殊日</span>
+                        <span style={{ ...bottomCardIconStyle, color: withAlpha('#1e1405', 0.70) }}>◎</span>
                     </div>
                     {firstSpecialDay ? (
                         <div style={specialDayItemsWrapperStyle}>
@@ -505,7 +508,7 @@ export default function CalendarHome(): ReactElement {
                             )}
                         </div>
                     ) : (
-                        <div style={{ ...specialDayNameStyle, color: withAlpha(colors.text.onBright, 0.45) }}>平稳无冲</div>
+                        <div style={{ ...specialDayNameStyle, color: withAlpha('#1e1405', 0.45) }}>平稳无冲</div>
                     )}
                 </div>
 
@@ -1110,14 +1113,14 @@ const specialDayItemStyle: React.CSSProperties = {
 // 特殊日第二个日子（加 border-top 作为分隔线）
 const specialDayItemSecondStyle: React.CSSProperties = {
     ...specialDayItemStyle,
-    borderTop: `1px solid ${withAlpha(colors.text.onBright, 0.15)}`,
+    borderTop: `1px solid ${withAlpha('#1e1405', 0.15)}`,
 }
 
 // 特殊日名称（大字标题）
 const specialDayNameStyle: React.CSSProperties = {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
-    color: colors.text.onBright,
+    color: '#1e1405',
     lineHeight: 1.3,
 }
 
@@ -1131,8 +1134,8 @@ const specialDayOverlaySubtitleStyle: React.CSSProperties = {
 // 特殊日情绪标签（标题下方）
 const specialDayEmotionTagStyle: React.CSSProperties = {
     fontSize: fontSize.xs,
-    color: withAlpha(colors.text.onBright, 0.55),
-    background: withAlpha(colors.text.onBright, 0.10),
+    color: withAlpha('#1e1405', 0.55),
+    background: withAlpha('#1e1405', 0.10),
     borderRadius: radius.full,
     padding: '2px 10px',
     alignSelf: 'flex-start',
@@ -1162,41 +1165,40 @@ const todoListStyle: React.CSSProperties = {
     overflow: 'hidden',
 }
 
-// 待办列表每一行
-const todoRowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 0',
-    borderTop: `1px solid ${colors.brand.border}`,
-}
-
 // 祈福卡片待办行（分割线用 onBright 基准色）
 const blessingTodoRowStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '10px 0',
-    borderTop: `1px solid ${withAlpha(colors.text.onBright, 0.15)}`,
+    borderTop: `1px solid ${withAlpha('#1e1405', 0.15)}`,
 }
 
-// 祈福待办行前缀·
-const todoRowPrefixStyle: React.CSSProperties = {
-    fontSize: fontSize.base,
-    color: withAlpha(colors.text.onBright, 0.50),
-    flexShrink: 0,
-    lineHeight: 1,
+const blessingTodoContentStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    flex: 1,
+    minWidth: 0,
 }
 
-// 待办文字
-const todoRowTextStyle: React.CSSProperties = {
-    fontSize: fontSize.md,
-    color: whiteAlpha(0.75),
+const blessingTodoItemStyle: React.CSSProperties = {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    color: '#1e1405',
+    lineHeight: 1.4,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    flex: 1,
-    minWidth: 0,
+}
+
+const blessingTodoReasonStyle: React.CSSProperties = {
+    fontSize: fontSize.xs,
+    color: withAlpha('#1e1405', 0.68),
+    lineHeight: 1.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
 }
 
 // 空状态文字
