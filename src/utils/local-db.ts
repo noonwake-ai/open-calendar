@@ -147,6 +147,10 @@ export async function getReportCache<T>(kind: string, typeKey: string): Promise<
     }
 }
 
+export async function clearAllReportCache(): Promise<void> {
+    await db.reportCache.clear()
+}
+
 export async function saveReportCache(kind: string, typeKey: string, data: unknown): Promise<void> {
     const cacheKey = `${kind}:${typeKey}:${getTodayDateStr()}`
     const existing = await db.reportCache.where('cacheKey').equals(cacheKey).first()
