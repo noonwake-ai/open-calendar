@@ -1,6 +1,6 @@
 import React, { ReactElement, useState, useRef, useCallback, useEffect } from 'react'
 import { paths } from '../router/urls'
-import { colors, fontSize, fontWeight, radius, spacing, brandAlpha } from '../styles/tokens'
+import { colors, fontSize, fontWeight, radius, spacing, brandAlpha, withAlpha } from '../styles/tokens'
 import { hexagramList, hexagramName } from '../domain/hexagram'
 import { sendProjectionMessage } from '../utils/projection-channel'
 import { getBaziInfoStr, getCurrentTimeWuxing } from '../utils/bazi-store'
@@ -19,7 +19,7 @@ import ResultVoiceBar from '../components/result-voice-bar'
 import { publicAssetUrl } from '../utils/public-asset-url'
 import printer from '../utils/printer'
 import { reportPiEventConsumerLog } from '../utils/pi-event-bridge'
-import { getTodoCategory } from './todo-meta'
+import { getTodoCategory, TODO_CATEGORY_COLORS } from './todo-meta'
 import stepAskingMp3 from '../assets/tts/step-asking.mp3'
 import stepReadyMp3 from '../assets/tts/step-ready.mp3'
 import stepInterpretingMp3 from '../assets/tts/step-interpreting.mp3'
@@ -55,6 +55,13 @@ interface ReportData {
     blessings: BlessingInput[]
 }
 
+const BLESSING_TAG_LABELS: Record<BlessingTag, string> = {
+    love: '桃花',
+    career: '事业',
+    wealth: '财运',
+    study: '学业',
+}
+
 function previewText(text: string, max = 240): string {
     return text.length <= max ? text : `${text.slice(0, max)}...`
 }
@@ -86,30 +93,119 @@ function normalizeBlessingTag(value: unknown, textForFallback: string): Blessing
     return getTodoCategory(textForFallback)
 }
 
-function normalizeBlessings(value: unknown): BlessingInput[] {
-    if (!Array.isArray(value)) return []
-
-    return value.flatMap(item => {
-        if (!item || typeof item !== 'object') return []
-
-        const record = item as Record<string, unknown>
-        const itemText = typeof record.item === 'string' ? record.item.trim() : ''
-        const reasonSource = typeof record.reason === 'string'
-            ? record.reason
-            : typeof record.Reason === 'string'
-                ? record.Reason
-                : ''
-        const reasonText = reasonSource.trim()
-        const blessing: BlessingInput = {
-            item: itemText,
-            reason: reasonText,
-            tag: normalizeBlessingTag(record.tag, `${itemText} ${reasonText}`.trim()),
-            date: typeof record.date === 'string' ? record.date.trim() : '',
+function getStringField(record: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+        const value = record[key]
+        if (typeof value === 'string') {
+            const trimmed = value.trim()
+            if (trimmed) return trimmed
         }
+    }
+    return ''
+}
 
-        if (!blessing.item || !blessing.date) return []
-        return [blessing]
-    })
+function normalizeBlessingDate(value: string): string {
+    const match = value.match(/\d{4}-\d{2}-\d{2}/)
+    return match ? match[0] : value
+}
+
+function normalizeBlessingRecord(value: unknown): BlessingInput[] {
+    if (!value || typeof value !== 'object') return []
+
+    const record = value as Record<string, unknown>
+    const itemText = getStringField(record, [
+        'item', 'Item',
+        'content', 'Content',
+        'name', 'Name',
+        'title', 'Title',
+        'text', 'Text',
+        'todo', 'Todo',
+        'task', 'Task',
+        'blessingItem', 'blessing_item',
+        'blessingContent', 'blessing_content',
+        'prayItem', 'pray_item',
+        'wishItem', 'wish_item',
+        '祈福事项', '事项', '心愿',
+    ])
+    const reasonText = getStringField(record, [
+        'reason', 'Reason',
+        'advice', 'Advice',
+        'description', 'Description',
+        'desc', 'Desc',
+        'note', 'Note',
+        'remark', 'Remark',
+        'message', 'Message',
+        'blessingReason', 'blessing_reason',
+        'prayReason', 'pray_reason',
+        'wishReason', 'wish_reason',
+        '原因', '说明', '建议',
+    ])
+    const dateText = normalizeBlessingDate(getStringField(record, [
+        'date', 'Date',
+        'day', 'Day',
+        'time', 'Time',
+        'datetime', 'DateTime',
+        'blessingDate', 'blessing_date',
+        'targetDate', 'target_date',
+        'prayDate', 'pray_date',
+        'wishDate', 'wish_date',
+        '日期', '执行日期',
+    ]))
+    const tagValue = record.tag ?? record.Tag ?? record.category ?? record.Category ?? record.type ?? record.Type ?? record.blessingTag ?? record.blessing_tag
+    const blessing: BlessingInput = {
+        item: itemText,
+        reason: reasonText,
+        tag: normalizeBlessingTag(tagValue, `${itemText} ${reasonText}`.trim()),
+        date: dateText,
+    }
+
+    if (!blessing.item || !blessing.date) return []
+    return [blessing]
+}
+
+function normalizeBlessings(value: unknown): BlessingInput[] {
+    if (Array.isArray(value)) {
+        return value.flatMap(item => normalizeBlessingRecord(item))
+    }
+    return normalizeBlessingRecord(value)
+}
+
+function findBlessingsInObject(value: unknown, seen = new Set<unknown>()): BlessingInput[] {
+    if (!value || typeof value !== 'object' || seen.has(value)) return []
+    seen.add(value)
+
+    if (Array.isArray(value)) {
+        const normalized = normalizeBlessings(value)
+        if (normalized.length > 0) return normalized
+        for (const item of value) {
+            const nested = findBlessingsInObject(item, seen)
+            if (nested.length > 0) return nested
+        }
+        return []
+    }
+
+    const record = value as Record<string, unknown>
+    const directKeys = [
+        'blessings', 'Blessings',
+        'blessingItems', 'blessing_items',
+        'prayItems', 'pray_items',
+        'wishItems', 'wish_items',
+        'todos', 'Todos',
+        '祈福事项', '祈福', '心愿事项',
+    ]
+
+    for (const key of directKeys) {
+        if (!(key in record)) continue
+        const normalized = normalizeBlessings(record[key])
+        if (normalized.length > 0) return normalized
+    }
+
+    for (const nestedValue of Object.values(record)) {
+        const nested = findBlessingsInObject(nestedValue, seen)
+        if (nested.length > 0) return nested
+    }
+
+    return []
 }
 
 function normalizeReportData(value: unknown): ReportData {
@@ -119,7 +215,7 @@ function normalizeReportData(value: unknown): ReportData {
     const reading = typeof record.reading === 'string' ? record.reading.trim() : ''
     const meaning = typeof record.meaning === 'string' ? record.meaning.trim() : ''
     const inscription = normalizeInscription(record.inscription)
-    const blessings = normalizeBlessings(record.blessings)
+    const blessings = findBlessingsInObject(record)
 
     if (!reading) throw new Error('Dify 返回缺少 reading')
     if (!meaning) throw new Error('Dify 返回缺少 meaning')
@@ -897,10 +993,22 @@ export default function ShakeHexagram(): ReactElement {
                             {content  && <p style={contentStyle}>{content}</p>}
                             {step === 'result' && reportData && reportData.blessings.length > 0 && (
                                 <div style={blessingsWrapStyle}>
-                                    <span style={{ fontSize: fontSize.xs, color: colors.text.muted, marginBottom: '4px' }}>祈福事项</span>
+                                    <span style={blessingSectionTitleStyle}>祈福事项</span>
                                     {reportData.blessings.map((b, i) => (
                                         <div key={i} style={blessingItemStyle}>
-                                            <span style={blessingDateStyle}>{b.date}</span>
+                                            <div style={blessingMetaRowStyle}>
+                                                <span style={blessingDateStyle}>{b.date}</span>
+                                                <span
+                                                    style={{
+                                                        ...blessingTagStyle,
+                                                        color: TODO_CATEGORY_COLORS[b.tag ?? getTodoCategory(b.item)],
+                                                        borderColor: withAlpha(TODO_CATEGORY_COLORS[b.tag ?? getTodoCategory(b.item)], 0.44),
+                                                        background: withAlpha(TODO_CATEGORY_COLORS[b.tag ?? getTodoCategory(b.item)], 0.12),
+                                                    }}
+                                                >
+                                                    {BLESSING_TAG_LABELS[b.tag ?? getTodoCategory(b.item)]}
+                                                </span>
+                                            </div>
                                             <span style={blessingTextStyle}>{b.item}</span>
                                             {b.reason && <span style={blessingReasonStyle}>{b.reason}</span>}
                                         </div>
@@ -1036,7 +1144,7 @@ const leftScrollStyle: React.CSSProperties = {
     overflowX: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    padding: `64px 0 ${spacing.lg}px`,
+    padding: `64px 0 196px`,
 }
 
 // Inner wrapper uses margin:auto to vertically center short content,
@@ -1075,7 +1183,7 @@ const titleStyle: React.CSSProperties = {
 
 const subtitleStyle: React.CSSProperties = {
     fontSize: fontSize.base,
-    color: colors.text.muted,
+    color: 'rgba(246, 236, 217, 0.56)',
     margin: 0,
     letterSpacing: '0.5px',
     lineHeight: 1.6,
@@ -1083,7 +1191,7 @@ const subtitleStyle: React.CSSProperties = {
 
 const contentStyle: React.CSSProperties = {
     fontSize: fontSize.md,
-    color: colors.text.secondary,
+    color: 'rgba(246, 236, 217, 1)',
     lineHeight: 1.8,
     margin: 0,
     whiteSpace: 'pre-line',
@@ -1196,29 +1304,59 @@ const blessingsWrapStyle: React.CSSProperties = {
     marginTop: `${spacing.sm}px`,
 }
 
+const blessingSectionTitleStyle: React.CSSProperties = {
+    fontSize: fontSize.xs,
+    color: 'rgba(246, 236, 217, 0.6)',
+    marginBottom: '4px',
+}
+
 const blessingItemStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: '2px',
-    padding: `${spacing.xs}px ${spacing.sm}px`,
+    gap: '6px',
+    padding: `${spacing.sm}px`,
     background: colors.bg.overlay,
     border: `1px solid ${colors.brand.border}`,
     borderRadius: radius.md,
 }
 
+const blessingMetaRowStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: `${spacing.sm}px`,
+    width: '100%',
+}
+
+const blessingTagStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '56px',
+    padding: '4px 10px',
+    border: '1px solid',
+    borderRadius: radius.full,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    lineHeight: 1,
+    boxSizing: 'border-box',
+}
+
 const blessingTextStyle: React.CSSProperties = {
-    fontSize: fontSize.sm,
-    color: colors.text.secondary,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+    color: 'rgba(246, 236, 217, 1)',
+    lineHeight: 1.6,
 }
 
 const blessingReasonStyle: React.CSSProperties = {
-    fontSize: fontSize.xs,
-    color: colors.text.muted,
+    fontSize: fontSize.sm,
+    color: 'rgba(246, 236, 217, 0.56)',
     lineHeight: 1.5,
 }
 
 const blessingDateStyle: React.CSSProperties = {
-    fontSize: fontSize.xs,
-    color: colors.text.muted,
+    fontSize: fontSize.sm,
+    color: 'rgba(246, 236, 217, 0.56)',
 }
