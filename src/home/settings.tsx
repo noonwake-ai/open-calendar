@@ -7,7 +7,7 @@ import { apis } from '../utils/api'
 import type { Bazi } from '../domain/types'
 import { colors, fontSize, fontWeight, radius, spacing, btn } from '../styles/tokens'
 import BackButton from '../components/back-button'
-import { clearAllBlessings } from '../utils/local-db'
+import { clearAllBlessings, clearAllReportCache } from '../utils/local-db'
 import { resetToSleep } from './index'
 import { sendProjectionMessage } from '../utils/projection-channel'
 
@@ -57,6 +57,18 @@ export default function Settings(): ReactElement {
         }
     }
 
+    const handleClearReports = async () => {
+        if (!window.confirm('确定要清理所有运势和特殊日报告缓存吗？清理后下次查看将重新生成。')) return
+        try {
+            await clearAllReportCache()
+            localStorage.removeItem('pi_fortune_viewed')
+            alert('运势报告已清理')
+        } catch (e) {
+            console.error('清理运势报告失败', e)
+            alert('清理失败，请重试')
+        }
+    }
+
     const handleResetToSleep = () => {
         resetToSleep()
         sendProjectionMessage({ type: 'trigger_scene', scene: 'sleep' })
@@ -98,6 +110,14 @@ export default function Settings(): ReactElement {
                     >
                         <span style={rowLabelStyle}>清理祈福数据</span>
                         <span style={{ fontSize: fontSize.sm, color: colors.text.muted }}>清除本地祈福待办</span>
+                    </div>
+                    <div style={dividerStyle} />
+                    <div
+                        style={{ ...rowStyle, cursor: 'pointer' }}
+                        onClick={handleClearReports}
+                    >
+                        <span style={rowLabelStyle}>清理运势报告</span>
+                        <span style={{ fontSize: fontSize.sm, color: colors.text.muted }}>清除今日运势与特殊日缓存</span>
                     </div>
                     <div style={dividerStyle} />
                     <div
