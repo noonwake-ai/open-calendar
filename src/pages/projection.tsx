@@ -7,8 +7,8 @@ type ProjectionScene = 'sleep' | 'idle' | 'wake' | 'interpret' | 'casting'
 type VideoSlot = 'A' | 'B'
 
 const DEMO_TENGOD_ID = TengodId.SHISHEN
-// Reason: 提前切换窗口 0.5s，Pi 负载高时 timeupdate 间隔可能 >250ms，0.3s 容易被跳过
-const EARLY_SWAP_THRESHOLD = 0.5
+// Reason: Pi 上 timeupdate 约 500ms 触发一次，视频约 5s，阈值必须 >= 1s 才能保证至少命中一次
+const EARLY_SWAP_THRESHOLD = 1.0
 
 async function playWithPreferredAudio(el: HTMLVideoElement): Promise<void> {
     el.muted = false
@@ -62,6 +62,7 @@ export default function ProjectionScreen(): ReactElement {
     const swap = useCallback(() => {
         if (swapLockRef.current) return
         swapLockRef.current = true
+        if (checkRef.current) { clearInterval(checkRef.current); checkRef.current = null }
 
         const active = getActive()
         const standby = getStandby()
@@ -73,7 +74,6 @@ export default function ProjectionScreen(): ReactElement {
 
         if (active) {
             active.style.zIndex = '0'
-            // Reason: 延迟 pause，确保 standby 已稳定接管画面
             setTimeout(() => {
                 active.pause()
                 swapLockRef.current = false
@@ -160,22 +160,34 @@ export default function ProjectionScreen(): ReactElement {
         preloadNext()
     }, [preloadNext, resolvePlaylist])
 
-    // ─── timeupdate：检测接近结尾时提前 swap ───
-    const onTimeUpdate = useCallback((slot: VideoSlot, gen: number) => {
-        if (gen !== generationRef.current) return
-        if (slot !== activeSlotRef.current) return
-        if (swapLockRef.current) return
-        if (!standbyReadyRef.current) return
+    // ─── 提前切换检测：用 setInterval 轮询 active video 剩余时间 ───
+    // Reason: Pi 上 timeupdate 约 500ms 一次且不可靠，改用 200ms 间隔的 setInterval 确保不错过切换窗口
+    // Reason: setInterval 持续运行，swapLock 自然防止重复触发，swap 完成后自动恢复检测
+    const checkRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-        const el = slot === 'A' ? videoA.current : videoB.current
-        if (!el || !el.duration) return
+    const startEarlySwapCheck = useCallback(() => {
+        if (checkRef.current) clearInterval(checkRef.current)
+        checkRef.current = setInterval(() => {
+            if (swapLockRef.current) return
+            if (!standbyReadyRef.current) return
 
-        const remaining = el.duration - el.currentTime
-        if (remaining <= EARLY_SWAP_THRESHOLD && remaining > 0) {
-            swap()
-            advanceAndPreload()
+            const el = getActive()
+            if (!el || !el.duration || el.paused) return
+
+            const remaining = el.duration - el.currentTime
+            if (remaining <= EARLY_SWAP_THRESHOLD && remaining > 0) {
+                swap()
+                advanceAndPreload()
+            }
+        }, 200)
+    }, [getActive, swap, advanceAndPreload])
+
+    const stopEarlySwapCheck = useCallback(() => {
+        if (checkRef.current) {
+            clearInterval(checkRef.current)
+            checkRef.current = null
         }
-    }, [swap, advanceAndPreload])
+    }, [])
 
     // ─── ended 兜底 ───
     const onEnded = useCallback((slot: VideoSlot, gen: number) => {
@@ -186,6 +198,7 @@ export default function ProjectionScreen(): ReactElement {
         if (standbyReadyRef.current) {
             swap()
             advanceAndPreload()
+            startEarlySwapCheck()
         } else {
             // Reason: standby 未 ready 时降级为单 video 直接换 src
             const currentScene = sceneRef.current
@@ -233,6 +246,7 @@ export default function ProjectionScreen(): ReactElement {
             if (msg.scene === 'sleep') {
                 generationRef.current += 1
                 swapLockRef.current = false
+                stopEarlySwapCheck()
                 sceneRef.current = 'sleep'
                 setScene('sleep')
                 playlistRef.current = []
@@ -282,6 +296,7 @@ export default function ProjectionScreen(): ReactElement {
                     swap()
                     // wake 播完会切 idle，提前预加载 idle[0]
                     preloadNext()
+                    startEarlySwapCheck()
                 }
                 standby.addEventListener('canplay', onReady)
                 standby.addEventListener('loadeddata', onReady)
@@ -311,6 +326,7 @@ export default function ProjectionScreen(): ReactElement {
                     standbyReadyRef.current = true
                     swap()
                     preloadNext()
+                    startEarlySwapCheck()
                 }
                 standby.addEventListener('canplay', onReady)
                 standby.addEventListener('loadeddata', onReady)
@@ -340,6 +356,7 @@ export default function ProjectionScreen(): ReactElement {
                 standbyReadyRef.current = true
                 swap()
                 preloadNext()
+                startEarlySwapCheck()
             }
             standby.addEventListener('canplay', onReady)
             standby.addEventListener('loadeddata', onReady)
@@ -347,15 +364,13 @@ export default function ProjectionScreen(): ReactElement {
             standby.load()
             if (standby.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) onReady()
         })
-    }, [getStandby, swap, preloadNext, resolvePlaylist, playVideoFallback])
+    }, [getStandby, swap, preloadNext, resolvePlaylist, playVideoFallback, startEarlySwapCheck, stopEarlySwapCheck])
 
-    // ─── 事件绑定 ───
+    // ─── 事件绑定（不再用 timeupdate，改用 setInterval 轮询）───
     useEffect(() => {
         const elA = videoA.current
         const elB = videoB.current
 
-        const handleTimeUpdateA = () => onTimeUpdate('A', generationRef.current)
-        const handleTimeUpdateB = () => onTimeUpdate('B', generationRef.current)
         const handleEndedA = () => onEnded('A', generationRef.current)
         const handleEndedB = () => onEnded('B', generationRef.current)
         const handleErrorA = () => onEnded('A', generationRef.current)
@@ -363,30 +378,27 @@ export default function ProjectionScreen(): ReactElement {
         const handleReadyA = () => onStandbyReady('A', generationRef.current)
         const handleReadyB = () => onStandbyReady('B', generationRef.current)
 
-        elA?.addEventListener('timeupdate', handleTimeUpdateA)
         elA?.addEventListener('ended', handleEndedA)
         elA?.addEventListener('error', handleErrorA)
         elA?.addEventListener('canplay', handleReadyA)
         elA?.addEventListener('loadeddata', handleReadyA)
-        elB?.addEventListener('timeupdate', handleTimeUpdateB)
         elB?.addEventListener('ended', handleEndedB)
         elB?.addEventListener('error', handleErrorB)
         elB?.addEventListener('canplay', handleReadyB)
         elB?.addEventListener('loadeddata', handleReadyB)
 
         return () => {
-            elA?.removeEventListener('timeupdate', handleTimeUpdateA)
+            stopEarlySwapCheck()
             elA?.removeEventListener('ended', handleEndedA)
             elA?.removeEventListener('error', handleErrorA)
             elA?.removeEventListener('canplay', handleReadyA)
             elA?.removeEventListener('loadeddata', handleReadyA)
-            elB?.removeEventListener('timeupdate', handleTimeUpdateB)
             elB?.removeEventListener('ended', handleEndedB)
             elB?.removeEventListener('error', handleErrorB)
             elB?.removeEventListener('canplay', handleReadyB)
             elB?.removeEventListener('loadeddata', handleReadyB)
         }
-    }, [onTimeUpdate, onEnded, onStandbyReady])
+    }, [onEnded, onStandbyReady, stopEarlySwapCheck])
 
     // Reason: 当前活跃 slot 的 video 需要应用 wake 动画，用 CSS class 区分
     const slotStyleA: React.CSSProperties = {
