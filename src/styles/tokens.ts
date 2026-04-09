@@ -57,6 +57,7 @@ export const colors = {
         secondary: withAlpha(RAW.warmGray, 0.8),
         muted:     withAlpha(RAW.warmGray, 0.5),
         accent:    RAW.brandLight,
+        onBright:  RAW.warmWhite,
         disabled:  withAlpha(RAW.warmGray, 0.3),
     },
 
