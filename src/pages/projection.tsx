@@ -1,4 +1,4 @@
-import React, { ReactElement, useEffect, useRef, useState } from 'react'
+import React, { ReactElement, useEffect, useRef, useState, useCallback } from 'react'
 import { getProjectionVideos } from '../video/tengod-projection-videos'
 import { listenProjectionChannel } from '../utils/projection-channel'
 import { TengodId } from '../common/utils/bazi'
@@ -9,74 +9,95 @@ type ProjectionScene = 'idle' | 'wake' | 'interpret' | 'casting'
 const DEMO_TENGOD_ID = TengodId.SHISHEN
 
 export default function ProjectionScreen(): ReactElement {
-    const [videoIndex, setVideoIndex] = useState(0)
+    const videoRef = useRef<HTMLVideoElement>(null)
     const [scene, setScene] = useState<ProjectionScene>('idle')
-    // Reason: BroadcastChannel 回调在 useEffect 闭包中，直接读 scene 会是旧值
-    const sceneRef = useRef(scene)
+    const sceneRef = useRef<ProjectionScene>('idle')
+    const indexRef = useRef(0)
+    const playlistRef = useRef<string[]>([])
+
+    // Reason: 用 ref 追踪 scene，避免事件回调闭包读到旧值
     sceneRef.current = scene
 
-    useEffect(() => {
-        return listenProjectionChannel((msg) => {
-            if (msg.type === 'trigger_scene') {
-                // Reason: 解卦/摇卦中不响应唤醒，避免打断当前场景
-                if (msg.scene === 'wake' && sceneRef.current !== 'idle') return
-                if (msg.scene === 'idle') {
-                    // 主动回到待机：重置到 idle 循环
-                    setScene('idle')
-                    setVideoIndex(0)
-                    return
-                }
-                setScene(msg.scene)
-                setVideoIndex(0)
-            }
-        })
+    const resolvePlaylist = useCallback((s: ProjectionScene): string[] => {
+        const videos = getProjectionVideos(DEMO_TENGOD_ID, s)
+        if (videos.length > 0) return videos
+        return getProjectionVideos(DEMO_TENGOD_ID, 'idle')
     }, [])
 
-    const videos = getProjectionVideos(DEMO_TENGOD_ID, scene)
-    const fallbackIdleVideos = getProjectionVideos(DEMO_TENGOD_ID, 'idle')
-    const activeVideos = videos.length > 0 ? videos : fallbackIdleVideos
-    const currentVideo = activeVideos[videoIndex] ?? null
+    // Reason: 就地更新 video.src，不销毁 DOM 元素，避免 Pi compositor 重建 surface 导致白闪
+    const playVideo = useCallback((src: string) => {
+        const el = videoRef.current
+        if (!el) return
+        el.src = src
+        el.load()
+        el.play().catch(() => {})
+    }, [])
 
-    const playNextVideo = () => {
-        if (scene === 'wake' || scene === 'casting') {
-            // wake 和 casting 播完回 idle
-            if (videoIndex < activeVideos.length - 1) {
-                setVideoIndex(prev => prev + 1)
+    const playNextVideo = useCallback(() => {
+        const currentScene = sceneRef.current
+        const playlist = playlistRef.current
+
+        if (currentScene === 'wake' || currentScene === 'casting') {
+            if (indexRef.current < playlist.length - 1) {
+                indexRef.current += 1
+                playVideo(playlist[indexRef.current])
                 return
             }
+            // 播完回 idle
+            const idleVideos = resolvePlaylist('idle')
+            sceneRef.current = 'idle'
             setScene('idle')
-            setVideoIndex(0)
+            playlistRef.current = idleVideos
+            indexRef.current = 0
+            playVideo(idleVideos[0])
             return
         }
 
-        if (scene === 'interpret') {
-            // interpret 循环播放，等主屏发 idle 消息才停
-            setVideoIndex(prev => (prev + 1) % activeVideos.length)
-            return
+        // idle / interpret: 循环
+        if (playlist.length <= 1) {
+            indexRef.current = 0
+        } else {
+            indexRef.current = (indexRef.current + 1) % playlist.length
+        }
+        playVideo(playlist[indexRef.current])
+    }, [playVideo, resolvePlaylist])
+
+    // ─── 初始化 + 监听消息 ───
+    useEffect(() => {
+        const idleVideos = resolvePlaylist('idle')
+        playlistRef.current = idleVideos
+        indexRef.current = 0
+        if (idleVideos.length > 0) {
+            playVideo(idleVideos[0])
         }
 
-        if (activeVideos.length <= 1) {
-            setVideoIndex(0)
-            return
-        }
-
-        setVideoIndex(prev => (prev + 1) % activeVideos.length)
-    }
-
-    if (!currentVideo) {
-        return (
-            <div style={centerStyle}>
-                <p style={statusTextStyle}>暂无视频素材</p>
-            </div>
-        )
-    }
+        return listenProjectionChannel((msg) => {
+            if (msg.type === 'trigger_scene') {
+                if (msg.scene === 'wake' && sceneRef.current !== 'idle') return
+                if (msg.scene === 'idle') {
+                    const idleVids = resolvePlaylist('idle')
+                    sceneRef.current = 'idle'
+                    setScene('idle')
+                    playlistRef.current = idleVids
+                    indexRef.current = 0
+                    playVideo(idleVids[0])
+                    return
+                }
+                const newPlaylist = resolvePlaylist(msg.scene)
+                sceneRef.current = msg.scene
+                setScene(msg.scene)
+                playlistRef.current = newPlaylist
+                indexRef.current = 0
+                playVideo(newPlaylist[0])
+            }
+        })
+    }, [playVideo, resolvePlaylist])
 
     return (
         <div style={pageStyle}>
+            {/* Reason: 不用 key，video 元素永远不销毁，compositor surface 持续存在 */}
             <video
-                key={currentVideo}
-                src={currentVideo}
-                autoPlay
+                ref={videoRef}
                 muted
                 playsInline
                 preload="auto"
@@ -84,12 +105,6 @@ export default function ProjectionScreen(): ReactElement {
                 onError={playNextVideo}
                 style={videoStyle}
             />
-
-            {/* <div style={overlayStyle}>
-                <p style={eyebrowStyle}>今日值守十神</p>
-                <h1 style={nameStyle}>比肩</h1>
-                <p style={metaStyle}>{scene === 'wake' ? '唤醒中' : scene === 'interpret' ? '解读中' : scene === 'casting' ? '摇卦中' : '常驻待机'}</p>
-            </div> */}
         </div>
     )
 }
@@ -106,39 +121,7 @@ const videoStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-}
-
-const overlayStyle: React.CSSProperties = {
-    position: 'absolute',
-    left: '32px',
-    bottom: '28px',
-    padding: '18px 22px',
-    borderRadius: '18px',
-    background: 'linear-gradient(135deg, rgba(8, 8, 8, 0.78), rgba(8, 8, 8, 0.32))',
-    border: '1px solid rgba(255,255,255,0.12)',
-    backdropFilter: 'blur(12px)',
-}
-
-const eyebrowStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: '12px',
-    letterSpacing: '0.32em',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.55)',
-}
-
-const nameStyle: React.CSSProperties = {
-    margin: '10px 0 0',
-    fontSize: '40px',
-    lineHeight: 1,
-    fontWeight: 300,
-    color: '#f8f4ea',
-}
-
-const metaStyle: React.CSSProperties = {
-    margin: '10px 0 0',
-    fontSize: '14px',
-    color: whiteAlpha(0.72),
+    background: '#000000',
 }
 
 const centerStyle: React.CSSProperties = {
@@ -155,27 +138,4 @@ const statusTextStyle: React.CSSProperties = {
     margin: 0,
     fontSize: '18px',
     color: whiteAlpha(0.82),
-}
-
-const emptyCardStyle: React.CSSProperties = {
-    maxWidth: '520px',
-    padding: '28px 32px',
-    borderRadius: '24px',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    textAlign: 'center',
-}
-
-const emptyTitleStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: '28px',
-    fontWeight: 300,
-    color: '#f8f4ea',
-}
-
-const emptyDescStyle: React.CSSProperties = {
-    margin: '12px 0 0',
-    fontSize: '14px',
-    lineHeight: 1.7,
-    color: whiteAlpha(0.68),
 }
